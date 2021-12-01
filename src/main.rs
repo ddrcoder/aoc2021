@@ -13,7 +13,16 @@ use std::io::Read;
 use std::iter::{once, Iterator};
 
 fn day1(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
-    0
+    // Lines -> numbers.
+    let nums: Vec<usize> = lines.iter().map(|s| s.parse().ok().unwrap_or(0)).collect();
+    // Numbers -> windows of width 3 or 1.
+    let windows = nums.windows(if gold { 3 } else { 1 });
+    // Sums of each window.
+    let sums: Vec<usize> = windows.map(|window| window.iter().cloned().sum()).collect();
+    // Adjacent pairs of sums.
+    let pairs = sums.windows(2);
+    let increasing_pairs = pairs.filter(|w| w[1] > w[0]);
+    increasing_pairs.count()
 }
 
 fn day2(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
@@ -131,8 +140,8 @@ fn main() {
 
     let wide = 20;
     println!(
-        "{1:>2}: {2:>0$} {3:>0$} {4:>0$}",
-        wide, "#", "test", "silver", "gold"
+        "{1:>2}: {2:>0$} {3:>0$} {4:>0$} {5:>0$}",
+        wide, "#", "test_silver", "test_gold", "silver", "gold"
     );
     for (i, solution) in solutions.iter().enumerate() {
         let n = i + 1;
@@ -152,16 +161,10 @@ fn main() {
                     .filter(|g| !g.is_empty())
                     .collect();
                 for gold in [false, true] {
-                    if test && gold {
-                        continue;
-                    }
                     print!(" {0:1$}", solution(&lines, &groups, gold), wide);
                 }
             } else {
                 for gold in [false, true] {
-                    if test && gold {
-                        continue;
-                    }
                     print!(" {0:>1$}", "-", wide);
                 }
             }
