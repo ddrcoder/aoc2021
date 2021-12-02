@@ -3,16 +3,17 @@ extern crate scan_fmt;
 extern crate clap;
 
 use clap::Parser;
-use std::hash::Hash;
+use std::str::FromStr;
+//use std::hash::Hash;
 use std::{collections::VecDeque, fmt::Debug};
 
-use regex::Regex;
-use std::collections::{hash_map::HashMap, hash_set::HashSet};
+use regex::{Captures, Regex};
+//use std::collections::{hash_map::HashMap, hash_set::HashSet};
 use std::fs::File;
 use std::io::Read;
-use std::iter::{once, Iterator};
+//use std::iter::{once, Iterator};
 
-fn day1(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day1(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     // Lines -> numbers.
     let nums: Vec<usize> = lines.iter().map(|s| s.parse().ok().unwrap_or(0)).collect();
     // Numbers -> windows of width 3 or 1.
@@ -25,97 +26,121 @@ fn day1(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     increasing_pairs.count()
 }
 
-fn day2(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day2(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let instructions = lines
+        .into_iter()
+        .flat_map(|s| scan_fmt!(s, "{} {}", String, usize).ok().into_iter());
+    let (mut x, mut y, mut a) = (0, 0, 0);
+    for (d, n) in instructions {
+        match &d[..] {
+            "forward" => {
+                x += n;
+                if gold {
+                    y += n * a;
+                }
+            }
+            "down" => {
+                a += n;
+            }
+            "up" => {
+                a -= n;
+            }
+            _ => {}
+        }
+    }
+    if !gold {
+        y = a;
+    }
+    x * y
+}
+
+fn day3(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day3(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day4(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day4(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day5(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day5(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day6(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day6(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day7(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day7(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day8(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day8(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day9(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day9(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day10(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day10(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day11(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day11(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day12(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day12(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day13(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
+    0
+}
+fn day14(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day13(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
-    0
-}
-fn day14(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day15(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day15(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day16(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day16(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day17(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day17(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day18(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day18(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day19(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
+    0
+}
+fn day20(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day19(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
-    0
-}
-fn day20(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day21(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day21(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day22(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day22(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day23(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day23(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day24(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day24(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
-    0
-}
-
-fn day25(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+fn day25(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
@@ -156,15 +181,20 @@ fn main() {
                 if test { "t" } else { "" }
             )) {
                 let lines: Vec<_> = content.split('\n').collect();
+                let lines = if lines[lines.len() - 1].is_empty() {
+                    &lines[0..(lines.len() - 1)]
+                } else {
+                    &lines
+                };
                 let groups: Vec<_> = lines
                     .split(|s| s.is_empty())
                     .filter(|g| !g.is_empty())
                     .collect();
                 for gold in [false, true] {
-                    print!(" {0:1$}", solution(&lines, &groups, gold), wide);
+                    print!(" {0:1$}", solution(lines, &groups, gold), wide);
                 }
             } else {
-                for gold in [false, true] {
+                for _gold in [false, true] {
                     print!(" {0:>1$}", "-", wide);
                 }
             }
