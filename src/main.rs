@@ -54,8 +54,42 @@ fn day2(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     x * y
 }
 
-fn day3(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day3(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let w = lines[0].len();
+    let start: Vec<usize> = lines
+        .iter()
+        .map(|s| usize::from_str_radix(s, 2).ok().unwrap())
+        .collect();
+    let ones_ge_zeros = |nums: &[usize], b| {
+        let c = nums.iter().cloned().filter(|x| (x >> b) & 1 == 1).count();
+        c * 2 >= nums.len()
+    };
+    if gold {
+        let (mut o2, mut co2) = (0, 0);
+        for (output, want_most) in [(&mut o2, false), (&mut co2, true)] {
+            let mut remaining: Vec<_> = start.clone();
+            for b in (0..w).rev() {
+                if remaining.len() <= 1 {
+                    break;
+                }
+                let keep_ones = ones_ge_zeros(&remaining, b) == want_most;
+                remaining = remaining
+                    .into_iter()
+                    .filter(|x| ((x >> b) & 1 == 1) == keep_ones)
+                    .collect();
+            }
+            *output = remaining[0];
+        }
+        o2 * co2
+    } else {
+        let gamma = (0..w)
+            .rev()
+            .map(|b| ones_ge_zeros(&start, b))
+            .fold(0, |v, is_one| v * 2 + (is_one as usize));
+        let mask = (1 << w) - 1;
+        let epsilon = !gamma & mask;
+        gamma * epsilon
+    }
 }
 
 fn day4(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
