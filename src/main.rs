@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::{collections::VecDeque, fmt::Debug};
 
 use regex::{Captures, Regex};
-//use std::collections::{hash_map::HashMap, hash_set::HashSet};
+use std::collections::{hash_map::HashMap, hash_set::HashSet};
 use std::fs::File;
 use std::io::Read;
 //use std::iter::{once, Iterator};
@@ -92,8 +92,71 @@ fn day3(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     }
 }
 
-fn day4(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn check_board(board: &mut Vec<Vec<i64>>, n: i64) -> Option<i64> {
+    let mut sum = 0;
+    for row in board.iter_mut() {
+        for num in row.iter_mut() {
+            if *num == n {
+                *num *= -1;
+            } else if *num > 0 {
+                sum += *num;
+            }
+        }
+    }
+    for row in 0..5 {
+        for col in 0..5 {
+            if board[row][col] > 0 {
+                break;
+            }
+            if col == 4 {
+                return Some(sum);
+            }
+        }
+    }
+    for col in 0..5 {
+        for row in 0..5 {
+            if board[row][col] > 0 {
+                break;
+            }
+            if row == 4 {
+                return Some(sum);
+            }
+        }
+    }
+
+    None
+}
+
+fn day4(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+    let numbers: Vec<i64> = groups[0][0]
+        .split(',')
+        .flat_map(|n| n.parse().ok())
+        .collect();
+    let mut boards: Vec<Vec<Vec<i64>>> = groups[1..]
+        .iter()
+        .map(|lines| {
+            lines
+                .iter()
+                .map(|line| line.split(' ').flat_map(|n| n.parse().ok()).collect())
+                .collect()
+        })
+        .collect();
+    let mut last = 0;
+    let mut won = HashSet::new();
+    for n in numbers {
+        for (i, board) in boards.iter_mut().enumerate() {
+            if let Some(sum) = check_board(board, n) {
+                if won.insert(i) {
+                    let score = (sum * n) as usize;
+                    if !gold {
+                        return score;
+                    }
+                    last = score;
+                }
+            }
+        }
+    }
+    return last;
 }
 
 fn day5(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
