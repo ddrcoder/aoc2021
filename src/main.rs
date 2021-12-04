@@ -92,7 +92,7 @@ fn day3(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     }
 }
 
-fn check_board(board: &mut Vec<Vec<i64>>, n: i64) -> Option<i64> {
+fn check_board(board: &mut [[i64; 5]; 5], n: i64) -> Option<i64> {
     let mut sum = 0;
     for row in board.iter_mut() {
         for num in row.iter_mut() {
@@ -127,20 +127,37 @@ fn check_board(board: &mut Vec<Vec<i64>>, n: i64) -> Option<i64> {
     None
 }
 
+fn collect_array<T: Default + Copy, Iter: Iterator<Item = T>, const N: usize>(
+    mut iter: Iter,
+) -> Option<[T; N]> {
+    let mut a = [Default::default(); N];
+    for i in 0..N {
+        if let Some(value) = iter.next() {
+            a[i] = value;
+        }
+    }
+    if let None = iter.next() {
+        Some(a)
+    } else {
+        None
+    }
+}
+
 fn day4(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     let numbers: Vec<i64> = groups[0][0]
         .split(',')
         .flat_map(|n| n.parse().ok())
         .collect();
-    let mut boards: Vec<Vec<Vec<i64>>> = groups[1..]
-        .iter()
-        .map(|lines| {
-            lines
-                .iter()
-                .map(|line| line.split(' ').flat_map(|n| n.parse().ok()).collect())
-                .collect()
-        })
-        .collect();
+    let mut boards: Vec<[[i64; 5]; 5]> =
+        groups[1..]
+            .iter()
+            .map(|lines| {
+                collect_array(lines.iter().map(|line| {
+                    collect_array(line.split(' ').flat_map(|n| n.parse().ok())).unwrap()
+                }))
+                .unwrap()
+            })
+            .collect();
     let mut last = 0;
     let mut won = HashSet::new();
     for n in numbers {
