@@ -3,6 +3,8 @@ extern crate scan_fmt;
 extern crate clap;
 
 use clap::Parser;
+use std::cmp::max;
+use std::cmp::min;
 use std::str::FromStr;
 //use std::hash::Hash;
 use std::{collections::VecDeque, fmt::Debug};
@@ -176,8 +178,48 @@ fn day4(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     return last;
 }
 
-fn day5(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day5(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let lines = lines.iter().map(|line| {
+        scan_fmt!(line, "{},{} -> {},{}", i64, i64, i64, i64)
+            .ok()
+            .unwrap()
+    });
+    let mut grid: HashMap<(i64, i64), i64> = HashMap::new();
+    for (x1, y1, x2, y2) in lines {
+        let points: Vec<(i64, i64)> = if x1 == x2 {
+            let (y1, y2) = if y1 > y2 { (y2, y1) } else { (y1, y2) };
+            (y1..=y2).map(|y| (x1, y)).collect()
+        } else if y1 == y2 {
+            let (x1, x2) = if x1 > x2 { (x2, x1) } else { (x1, x2) };
+            (x1..=x2).map(|x| (x, y1)).collect()
+        } else if gold {
+            if (x1 - x2).abs() >= (y1 - y2).abs() {
+                let (x1, y1, x2, y2) = if x1 > x2 {
+                    (x2, y2, x1, y1)
+                } else {
+                    (x1, y1, x2, y2)
+                };
+                (x1..=x2)
+                    .map(|x| (x, (x - x1) * (y2 - y1) / (x2 - x1) + y1))
+                    .collect()
+            } else {
+                let (x1, x2, y1, y2) = if y1 > y2 {
+                    (x2, y2, x1, y1)
+                } else {
+                    (x1, x2, y1, y2)
+                };
+                (y1..=y2)
+                    .map(|y| ((y - y1) * (x2 - x1) / (y2 - y1) + x1, y))
+                    .collect()
+            }
+        } else {
+            continue;
+        };
+        for (x, y) in points {
+            *grid.entry((x, y)).or_insert(0) += 1;
+        }
+    }
+    grid.values().filter(|v| **v > 1).count()
 }
 
 fn day6(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
