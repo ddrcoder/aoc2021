@@ -222,8 +222,29 @@ fn day5(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     grid.values().filter(|v| **v > 1).count()
 }
 
-fn day6(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day6(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let days: Vec<usize> = lines[0]
+        .split(',')
+        .map(|s| s.parse().ok().unwrap_or(0))
+        .collect();
+    let mut populations: HashMap<usize, usize> = HashMap::new();
+    for d in days {
+        *populations.entry(d).or_insert(0) += 1;
+    }
+    for d in 0..if gold { 256 } else { 80 } {
+        let mut next: HashMap<usize, usize> = HashMap::new();
+        for (remaining, n) in populations.into_iter() {
+            if remaining == 0 {
+                *next.entry(6).or_insert(0) += n;
+                *next.entry(8).or_insert(0) += n;
+            } else {
+                *next.entry(remaining - 1).or_insert(0) += n;
+            }
+        }
+
+        populations = next;
+    }
+    populations.values().sum()
 }
 
 fn day7(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
