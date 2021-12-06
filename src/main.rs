@@ -223,28 +223,18 @@ fn day5(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
 }
 
 fn day6(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
-    let days: Vec<usize> = lines[0]
-        .split(',')
-        .map(|s| s.parse().ok().unwrap_or(0))
-        .collect();
-    let mut populations: HashMap<usize, usize> = HashMap::new();
-    for d in days {
-        *populations.entry(d).or_insert(0) += 1;
+    let mut birthday_counts = [0; 265];
+    for d in lines[0].split(',') {
+        let day: usize = d.parse().ok().unwrap();
+        birthday_counts[day] += 1;
     }
-    for d in 0..if gold { 256 } else { 80 } {
-        let mut next: HashMap<usize, usize> = HashMap::new();
-        for (remaining, n) in populations.into_iter() {
-            if remaining == 0 {
-                *next.entry(6).or_insert(0) += n;
-                *next.entry(8).or_insert(0) += n;
-            } else {
-                *next.entry(remaining - 1).or_insert(0) += n;
-            }
-        }
-
-        populations = next;
+    let end = if gold { 256 } else { 80 };
+    for day in 0..end {
+        let n = birthday_counts[day];
+        birthday_counts[day + 7] += n;
+        birthday_counts[day + 9] += n;
     }
-    populations.values().sum()
+    birthday_counts[end..].into_iter().sum()
 }
 
 fn day7(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
