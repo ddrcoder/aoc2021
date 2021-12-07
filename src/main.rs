@@ -237,8 +237,19 @@ fn day6(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     birthday_counts[end..].into_iter().sum()
 }
 
-fn day7(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day7(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let crabs: Vec<i64> = lines[0].split(',').flat_map(|n| n.parse().ok()).collect();
+    let (max, min) = (crabs.iter().max(), crabs.iter().min());
+    (*min.unwrap()..=*max.unwrap())
+        .map(|t| {
+            crabs
+                .iter()
+                .map(|p| (t - p).abs() as usize)
+                .map(|d| if gold { (d * d + d) / 2 } else { d })
+                .sum()
+        })
+        .min()
+        .unwrap()
 }
 
 fn day8(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
