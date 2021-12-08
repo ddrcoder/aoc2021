@@ -252,8 +252,119 @@ fn day7(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
         .unwrap()
 }
 
-fn day8(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day8(lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
+    let pairs: Vec<(Vec<&str>, Vec<&str>)> = lines
+        .iter()
+        .map(|line| line.split(" | ").map(|set| set.split(' ').collect()))
+        .map(|mut parts| (parts.next().unwrap(), parts.next().unwrap()))
+        .collect();
+
+    let mut sum = 0;
+
+    /*
+     0000
+    1    2
+    1    2
+     3333
+    4    5
+    4    5
+     6666
+    */
+    let codings: [&[u8]; 10] = [
+        //0
+        &[0, 1, 2, 4, 5, 6][..],
+        //1
+        &[2, 5][..],
+        //2
+        &[0, 2, 3, 4, 6][..],
+        //3
+        &[0, 2, 3, 5, 6][..],
+        //4
+        &[1, 2, 3, 5][..],
+        //5
+        &[0, 1, 3, 5, 6][..],
+        //6
+        &[0, 1, 3, 4, 5, 6][..],
+        //7
+        &[0, 2, 5][..],
+        //8
+        &[0, 1, 2, 3, 4, 5, 6][..],
+        //9
+        &[0, 1, 2, 3, 5, 6][..],
+    ];
+
+    // Hmm, set math is hard, let's just stupidly brute force literally every
+    // possible assignment.
+    for (samples, output) in pairs {
+        fn fact(n: usize) -> usize {
+            if n == 1 {
+                1
+            } else {
+                n * fact(n - 1)
+            }
+        }
+
+        fn assign(mut perm: usize) -> [u8; 7] {
+            let mut ret = [9; 7];
+            for d in (1..=7).rev() {
+                let mut r = perm % d;
+                perm /= d;
+                for slot in &mut ret {
+                    if *slot == 9 {
+                        if r == 0 {
+                            *slot = d as u8 - 1;
+                            break;
+                        } else {
+                            r -= 1;
+                        }
+                    }
+                }
+            }
+            ret
+        }
+        for permutation in (0..(fact(7))).rev() {
+            let assignment = assign(permutation + 1);
+            let decode = |s: &str| {
+                let mut lights: Vec<u8> = s
+                    .chars()
+                    .map(|ch| assignment[(ch as u8 - 'a' as u8) as usize])
+                    .collect();
+                lights.sort();
+                codings.iter().enumerate().find_map(|(n, coding)| {
+                    if coding == &&lights[..] {
+                        Some(n)
+                    } else {
+                        None
+                    }
+                })
+            };
+            let mut covered = [false; 10];
+            let mut good = true;
+            for sample in &samples {
+                if let Some(i) = decode(sample) {
+                    if covered[i] {
+                        good = false;
+                        break;
+                    }
+                    covered[i] = true;
+                } else {
+                    good = false;
+                    break;
+                }
+            }
+            if good {
+                let mut n = 0;
+                for sample in output {
+                    n = n * 10 + decode(sample).unwrap();
+                }
+                sum += n;
+                break;
+            } else if permutation == 0 {
+                panic!("failed to assign!");
+            }
+        }
+    }
+    sum
 }
 
 fn day9(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
