@@ -252,119 +252,78 @@ fn day7(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
         .unwrap()
 }
 
-fn day8(lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    let pairs: Vec<(Vec<&str>, Vec<&str>)> = lines
+fn day8(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let pairs: Vec<(Vec<u8>, Vec<u8>)> = lines
         .iter()
-        .map(|line| line.split(" | ").map(|set| set.split(' ').collect()))
+        .map(|line| {
+            line.split(" | ").map(|set| {
+                set.split(' ')
+                    .map(|s| {
+                        s.chars()
+                            .map(|ch| 1 << ((ch as u8 - 'a' as u8) as usize))
+                            .fold(0, |n, b| (n | b))
+                    })
+                    .collect()
+            })
+        })
         .map(|mut parts| (parts.next().unwrap(), parts.next().unwrap()))
         .collect();
-
-    let mut sum = 0;
-
-    /*
-     0000
-    1    2
-    1    2
-     3333
-    4    5
-    4    5
-     6666
-    */
-    let codings: [&[u8]; 10] = [
-        //0
-        &[0, 1, 2, 4, 5, 6][..],
-        //1
-        &[2, 5][..],
-        //2
-        &[0, 2, 3, 4, 6][..],
-        //3
-        &[0, 2, 3, 5, 6][..],
-        //4
-        &[1, 2, 3, 5][..],
-        //5
-        &[0, 1, 3, 5, 6][..],
-        //6
-        &[0, 1, 3, 4, 5, 6][..],
-        //7
-        &[0, 2, 5][..],
-        //8
-        &[0, 1, 2, 3, 4, 5, 6][..],
-        //9
-        &[0, 1, 2, 3, 5, 6][..],
-    ];
-
-    // Hmm, set math is hard, let's just stupidly brute force literally every
-    // possible assignment.
-    for (samples, output) in pairs {
-        fn fact(n: usize) -> usize {
-            if n == 1 {
-                1
-            } else {
-                n * fact(n - 1)
+    pairs
+        .into_iter()
+        .map(|(samples, output)| {
+            fn find<F: FnMut(u8) -> bool>(samples: &[u8], mut test: F) -> u8 {
+                let mut matches = samples.iter().cloned().filter(|v| test(*v));
+                let first = matches.next().unwrap();
+                if let Some(second) = matches.next() {
+                    panic!("matched {} and {}", first, second);
+                }
+                first
             }
-        }
-
-        fn assign(mut perm: usize) -> [u8; 7] {
-            let mut ret = [9; 7];
-            for d in (1..=7).rev() {
-                let mut r = perm % d;
-                perm /= d;
-                for slot in &mut ret {
-                    if *slot == 9 {
-                        if r == 0 {
-                            *slot = d as u8 - 1;
-                            break;
-                        } else {
-                            r -= 1;
+            let samples = &samples[..];
+            let mut codes = [0; 10];
+            codes[1] = find(samples, |v| v.count_ones() == 2);
+            codes[4] = find(samples, |v| v.count_ones() == 4);
+            codes[7] = find(samples, |v| v.count_ones() == 3);
+            codes[8] = find(samples, |v| v.count_ones() == 7);
+            codes[3] = find(samples, |v| {
+                v.count_ones() == 5 && (v ^ codes[7]).count_ones() == 2
+            });
+            codes[9] = find(samples, |v| {
+                v.count_ones() == 6 && (v ^ codes[3]).count_ones() == 1
+            });
+            codes[5] = find(samples, |v| {
+                v.count_ones() == 5 && (v | codes[7]) == codes[9]
+            });
+            codes[6] = find(samples, |v| {
+                v.count_ones() == 6 && (v | codes[1]) == codes[8]
+            });
+            codes[0] = find(samples, |v| {
+                v.count_ones() == 6 && (v & (codes[9] ^ codes[6])).count_ones() == 2
+            });
+            codes[2] = find(samples, |v| {
+                v.count_ones() == 5 && (v | codes[4]) == codes[8]
+            });
+            output
+                .iter()
+                .map(|code| {
+                    codes
+                        .iter()
+                        .enumerate()
+                        .find_map(|(i, item)| if code == item { Some(i) } else { None })
+                        .unwrap()
+                })
+                .fold(0, |n, d| {
+                    if gold {
+                        n * 10 + d
+                    } else {
+                        n + match d {
+                            1 | 4 | 7 | 8 => 1,
+                            _ => 0,
                         }
                     }
-                }
-            }
-            ret
-        }
-        for permutation in (0..(fact(7))).rev() {
-            let assignment = assign(permutation + 1);
-            let decode = |s: &str| {
-                let mut lights: Vec<u8> = s
-                    .chars()
-                    .map(|ch| assignment[(ch as u8 - 'a' as u8) as usize])
-                    .collect();
-                lights.sort();
-                codings.iter().enumerate().find_map(|(n, coding)| {
-                    if coding == &&lights[..] {
-                        Some(n)
-                    } else {
-                        None
-                    }
                 })
-            };
-            let mut covered = [false; 10];
-            let mut good = true;
-            for sample in &samples {
-                if let Some(i) = decode(sample) {
-                    if covered[i] {
-                        good = false;
-                        break;
-                    }
-                    covered[i] = true;
-                } else {
-                    good = false;
-                    break;
-                }
-            }
-            if good {
-                let mut n = 0;
-                for sample in output {
-                    n = n * 10 + decode(sample).unwrap();
-                }
-                sum += n;
-                break;
-            } else if permutation == 0 {
-                panic!("failed to assign!");
-            }
-        }
-    }
-    sum
+        })
+        .sum()
 }
 
 fn day9(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
