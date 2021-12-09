@@ -238,6 +238,7 @@ fn day6(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
 }
 
 fn day7(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    return 0;
     let crabs: Vec<i64> = lines[0].split(',').flat_map(|n| n.parse().ok()).collect();
     let (max, min) = (crabs.iter().max(), crabs.iter().min());
     (*min.unwrap()..=*max.unwrap())
@@ -326,8 +327,63 @@ fn day8(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
         .sum()
 }
 
-fn day9(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn fill(land: &mut Vec<Vec<u8>>, x: usize, y: usize) -> usize {
+    let here = &mut land[y][x];
+    let mut s = 0;
+    if *here < 9 {
+        s += 1;
+        *here = 10;
+        if x > 0 {
+            s += fill(land, x - 1, y)
+        }
+        if x + 1 < land[y].len() {
+            s += fill(land, x + 1, y);
+        }
+
+        if y > 0 {
+            s += fill(land, x, y - 1)
+        }
+
+        if y + 1 < land.len() {
+            s += fill(land, x, y + 1);
+        }
+    }
+    s
+}
+
+fn day9(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let mut land: Vec<Vec<_>> = lines
+        .iter()
+        .map(|line| line.chars().map(|ch| (ch as u8 - '0' as u8)).collect())
+        .collect();
+    let mut starts = vec![];
+    for y in 0..land.len() {
+        let row = &land[y];
+        for x in 0..row.len() {
+            let here = row[x];
+            if (x > 0 && row[x - 1] <= here)
+                || (x + 1 < row.len() && row[x + 1] <= here)
+                || (y > 0 && land[y - 1][x] <= here)
+                || (y + 1 < land.len() && land[y + 1][x] <= here)
+            {
+                continue;
+            }
+            starts.push((x, y));
+        }
+    }
+    if gold {
+        let mut areas = vec![0; starts.len()];
+        for (i, (x, y)) in starts.into_iter().enumerate() {
+            areas[i] = fill(&mut land, x, y);
+        }
+        areas.sort();
+        areas[(areas.len() - 3)..].into_iter().product()
+    } else {
+        starts
+            .into_iter()
+            .map(|(x, y)| land[y][x] as usize + 1)
+            .sum()
+    }
 }
 
 fn day10(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
