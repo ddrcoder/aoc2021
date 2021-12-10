@@ -238,19 +238,61 @@ fn day6(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
 }
 
 fn day7(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
-    return 0;
-    let crabs: Vec<i64> = lines[0].split(',').flat_map(|n| n.parse().ok()).collect();
-    let (max, min) = (crabs.iter().max(), crabs.iter().min());
-    (*min.unwrap()..=*max.unwrap())
-        .map(|t| {
-            crabs
-                .iter()
-                .map(|p| (t - p).abs() as usize)
-                .map(|d| if gold { (d * d + d) / 2 } else { d })
-                .sum()
-        })
-        .min()
-        .unwrap()
+    let mut crabs: Vec<usize> = lines[0].split(',').flat_map(|n| n.parse().ok()).collect();
+    crabs.sort();
+    let mut crabs = &crabs[..];
+    #[derive(Debug)]
+    struct End {
+        c: usize,
+        dc: usize,
+        n: usize,
+    }
+    let mut l = End { c: 0, dc: 0, n: 0 };
+    let mut r = End { c: 0, dc: 0, n: 0 };
+    while crabs.len() > 2 {
+        let dl = crabs[1] - crabs[0];
+        let dr = crabs[crabs.len() - 1] - crabs[crabs.len() - 2];
+        let (next_crabs, d, end) = if r.dc < l.dc {
+            (&crabs[0..(crabs.len() - 1)], dr, &mut r)
+        } else {
+            (&crabs[1..], dl, &mut l)
+        };
+        crabs = next_crabs;
+        end.n += 1;
+        if gold {
+            // TODO: Calculus.
+            for s in 0..d {
+                end.dc += end.n;
+                end.c += end.dc;
+            }
+        } else {
+            end.dc += 1;
+            end.c += end.dc * d;
+        }
+    }
+    // Setup derivatives to be ready to include crab at either end.
+    l.n += 1;
+    l.dc += l.n;
+    r.n += 1;
+    r.dc += r.n;
+    let (mut pl, mut pr) = (crabs[0], crabs[1]);
+    while pl < pr {
+        if r.dc < l.dc {
+            pr -= 1;
+            r.c += r.dc;
+            if gold {
+                r.dc += r.n;
+            }
+        } else {
+            pl += 1;
+            l.c += l.dc;
+            if gold {
+                l.dc += l.n;
+            }
+        }
+    }
+
+    l.c + r.c
 }
 
 fn day8(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
@@ -327,31 +369,31 @@ fn day8(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
         .sum()
 }
 
-fn fill(land: &mut Vec<Vec<u8>>, x: usize, y: usize) -> usize {
-    let here = &mut land[y][x];
-    let mut s = 0;
-    if *here < 9 {
-        s += 1;
-        *here = 10;
-        if x > 0 {
-            s += fill(land, x - 1, y)
-        }
-        if x + 1 < land[y].len() {
-            s += fill(land, x + 1, y);
-        }
-
-        if y > 0 {
-            s += fill(land, x, y - 1)
-        }
-
-        if y + 1 < land.len() {
-            s += fill(land, x, y + 1);
-        }
-    }
-    s
-}
-
 fn day9(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    fn fill(land: &mut Vec<Vec<u8>>, x: usize, y: usize) -> usize {
+        let here = &mut land[y][x];
+        let mut s = 0;
+        if *here < 9 {
+            s += 1;
+            *here = 10;
+            if x > 0 {
+                s += fill(land, x - 1, y)
+            }
+            if x + 1 < land[y].len() {
+                s += fill(land, x + 1, y);
+            }
+
+            if y > 0 {
+                s += fill(land, x, y - 1)
+            }
+
+            if y + 1 < land.len() {
+                s += fill(land, x, y + 1);
+            }
+        }
+        s
+    }
+
     let mut land: Vec<Vec<_>> = lines
         .iter()
         .map(|line| line.chars().map(|ch| (ch as u8 - '0' as u8)).collect())
@@ -386,8 +428,38 @@ fn day9(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     }
 }
 
-fn day10(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day10(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let nested = "([{<>}])";
+    let e_scores = [3, 57, 1197, 25137];
+    let mut scores: Vec<_> = lines
+        .iter()
+        .filter_map(|line| {
+            let mut stack = vec![];
+            for ch in line.chars() {
+                if let Some(found) = nested.find(ch) {
+                    let other = nested.len() - 1 - found;
+                    if found < 4 {
+                        stack.push(found);
+                    } else if stack.pop() != Some(other) {
+                        return if gold { None } else { Some(e_scores[other]) };
+                    }
+                } else {
+                    break; // non paren
+                }
+            }
+            if gold {
+                Some(stack.into_iter().rev().fold(0, |s, d| s * 5 + d + 1))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if gold {
+        scores.sort();
+        *scores.get(&scores.len() / 2).unwrap_or(&0)
+    } else {
+        scores.into_iter().sum()
+    }
 }
 
 fn day11(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
