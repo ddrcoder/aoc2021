@@ -462,8 +462,78 @@ fn day10(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     }
 }
 
-fn day11(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day11(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let mut grid: Vec<Vec<_>> = lines
+        .iter()
+        .map(|line| line.chars().map(|ch| (ch as u8 - '0' as u8)).collect())
+        .collect();
+    let mut flashes = 0;
+    for i in 0.. {
+        if false {
+            eprintln!("{}", i);
+            for y in 0..grid.len() {
+                if grid.len() > 40 {
+                    break;
+                }
+                for x in 0..grid[y].len() {
+                    eprint!("{}", (grid[y][x] + '0' as u8) as char);
+                }
+                eprintln!();
+            }
+            eprintln!();
+        }
+        for y in 0..grid.len() {
+            for x in 0..grid[y].len() {
+                grid[y][x] += 1;
+            }
+        }
+        let mut change = true;
+
+        while change {
+            change = false;
+            for y in 0..grid.len() {
+                for x in 0..grid[y].len() {
+                    if grid[y][x] == 10 {
+                        grid[y][x] = 11;
+                        change = true;
+                        for ny in (if y >= 1 { y - 1 } else { y })..=(if y + 1 < grid.len() {
+                            y + 1
+                        } else {
+                            y
+                        }) {
+                            for nx in (if x >= 1 { x - 1 } else { x })..=(if x + 1 < grid[y].len() {
+                                x + 1
+                            } else {
+                                x
+                            }) {
+                                let p = &mut grid[ny][nx];
+                                if *p < 10 {
+                                    *p += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for y in 0..grid.len() {
+            for x in 0..grid[y].len() {
+                let p = &mut grid[y][x];
+                if *p > 9 {
+                    flashes += 1;
+                    *p = 0;
+                }
+            }
+        }
+        if gold {
+            if grid.iter().all(|line| line.iter().all(|v| *v == 0)) {
+                return i + 1;
+            }
+        } else if i == 100 {
+            break;
+        }
+    }
+    flashes
 }
 
 fn day12(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
