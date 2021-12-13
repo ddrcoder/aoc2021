@@ -536,8 +536,48 @@ fn day11(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     flashes
 }
 
-fn day12(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn count_paths<'a>(
+    current: &'a str,
+    edges: &'a HashMap<&'a str, HashSet<&'a str>>,
+    visited_small: &mut HashSet<&'a str>,
+    spent_small: bool,
+) -> usize {
+    if current == "end" {
+        1
+    } else if let Some(nexts) = edges.get(current) {
+        let mut n = 0;
+        for next in nexts.iter() {
+            let big = next.chars().all(|ch| ch.is_ascii_uppercase());
+            let spend = if !big && !visited_small.insert(*next) {
+                if !spent_small && next != &"start" {
+                    true
+                } else {
+                    continue;
+                }
+            } else {
+                false
+            };
+            n += count_paths(next, edges, visited_small, spent_small || spend);
+            if !big && !spend {
+                visited_small.remove(next);
+            }
+        }
+        n
+    } else {
+        0
+    }
+}
+
+fn day12(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let mut edges: HashMap<&str, HashSet<&str>> = HashMap::new();
+    for line in lines {
+        let mut side = line.split('-');
+        let n0 = side.next().unwrap();
+        let n1 = side.next().unwrap();
+        edges.entry(n0).or_insert(HashSet::new()).insert(n1);
+        edges.entry(n1).or_insert(HashSet::new()).insert(n0);
+    }
+    count_paths("start", &edges, &mut ["start"].into(), !gold)
 }
 
 fn day13(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
