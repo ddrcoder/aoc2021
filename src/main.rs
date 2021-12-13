@@ -540,9 +540,37 @@ fn day12(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day13(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
+fn day13(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+    let mut points: HashSet<_> = groups[0]
+        .iter()
+        .map(|line| scan_fmt!(line, "{},{}", i64, i64).ok().unwrap())
+        .collect();
+    let folds: Vec<_> = groups[1]
+        .iter()
+        .map(|fold| scan_fmt!(fold, "fold along {}={}", char, i64).ok().unwrap())
+        .collect();
+    for (axis, cut) in folds {
+        points = points
+            .into_iter()
+            .map(|(x, y)| match axis {
+                'x' => (if x < cut { x } else { cut * 2 - x }, y),
+                'y' => (x, if y < cut { y } else { cut * 2 - y }),
+                _ => panic!(),
+            })
+            .collect();
+        if !gold {
+            return points.len();
+        }
+    }
+    for y in 0..=10 {
+        println!();
+        for x in 0..=40 {
+            print!("{}", if points.contains(&(x, y)) { "##" } else { "  " });
+        }
+    }
     0
 }
+
 fn day14(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
