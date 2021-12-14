@@ -5,6 +5,7 @@ extern crate clap;
 use clap::Parser;
 use std::cmp::max;
 use std::cmp::min;
+use std::hash::Hash;
 use std::str::FromStr;
 //use std::hash::Hash;
 use std::{collections::VecDeque, fmt::Debug};
@@ -13,6 +14,7 @@ use regex::{Captures, Regex};
 use std::collections::{hash_map::HashMap, hash_set::HashSet};
 use std::fs::File;
 use std::io::Read;
+use std::iter::once;
 //use std::iter::{once, Iterator};
 
 fn day1(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
@@ -184,7 +186,7 @@ fn day5(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
             .ok()
             .unwrap()
     });
-    let mut grid: HashMap<(i64, i64), i64> = HashMap::new();
+    let mut grid: HashMap<(i64, i64), usize> = HashMap::new();
     for (x1, y1, x2, y2) in lines {
         let points: Vec<(i64, i64)> = if x1 == x2 {
             let (y1, y2) = if y1 > y2 { (y2, y1) } else { (y1, y2) };
@@ -216,7 +218,7 @@ fn day5(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
             continue;
         };
         for (x, y) in points {
-            *grid.entry((x, y)).or_insert(0) += 1;
+            hist_inc(&mut grid, (x, y), 1);
         }
     }
     grid.values().filter(|v| **v > 1).count()
@@ -602,17 +604,52 @@ fn day13(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
             return points.len();
         }
     }
-    for y in 0..=10 {
-        println!();
-        for x in 0..=40 {
-            print!("{}", if points.contains(&(x, y)) { "##" } else { "  " });
+    if false {
+        for y in 0..=10 {
+            println!();
+            for x in 0..=40 {
+                print!("{}", if points.contains(&(x, y)) { "##" } else { "  " });
+            }
         }
     }
     0
 }
 
-fn day14(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn at(s: &str, i: usize) -> char {
+    s.chars().skip(i).next().unwrap()
+}
+
+fn hist_inc<K: Eq + Hash>(hist: &mut HashMap<K, usize>, k: K, n: usize) {
+    *hist.entry(k).or_insert(0) += n;
+}
+fn hist_make<K: Eq + Hash, I: Iterator<Item = K>>(keys: I) -> HashMap<K, usize> {
+    let mut hist = HashMap::new();
+    keys.for_each(|k| hist_inc(&mut hist, k, 1));
+    hist
+}
+
+fn day14(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+    let rules: HashMap<_, _> = groups[1]
+        .iter()
+        .flat_map(|line| scan_fmt!(line, "{/./}{/./} -> {/./}", char, char, char).ok())
+        .map(|(a, b, m)| ((a, b), m))
+        .collect();
+    let s = groups[0][0];
+    let mut char_counts = hist_make(s.chars());
+    let pairs = s.chars().zip(s.chars().skip(1));
+    let mut pair_counts = hist_make(pairs);
+    for _step in 0..(if gold { 40 } else { 10 }) {
+        let mut pair_counts_new = HashMap::new();
+        for ((a, b), n) in pair_counts {
+            if let Some(&m) = rules.get(&(a, b)) {
+                hist_inc(&mut char_counts, m, n);
+                hist_inc(&mut pair_counts_new, (a, m), n);
+                hist_inc(&mut pair_counts_new, (m, b), n);
+            }
+        }
+        pair_counts = pair_counts_new;
+    }
+    char_counts.values().max().unwrap() - char_counts.values().min().unwrap()
 }
 
 fn day15(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
