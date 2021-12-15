@@ -7,6 +7,7 @@ use std::cmp::max;
 use std::cmp::min;
 use std::hash::Hash;
 use std::str::FromStr;
+use std::time::Instant;
 //use std::hash::Hash;
 use std::{collections::VecDeque, fmt::Debug};
 
@@ -615,10 +616,6 @@ fn day13(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     0
 }
 
-fn at(s: &str, i: usize) -> char {
-    s.chars().skip(i).next().unwrap()
-}
-
 fn hist_inc<K: Eq + Hash>(hist: &mut HashMap<K, usize>, k: K, n: usize) {
     *hist.entry(k).or_insert(0) += n;
 }
@@ -652,8 +649,71 @@ fn day14(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     char_counts.values().max().unwrap() - char_counts.values().min().unwrap()
 }
 
-fn day15(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn bfs(grid: &mut Vec<Vec<(u8, Option<usize>)>>) -> Option<usize> {
+    grid[0][0].1 = Some(0);
+    let mut touched: HashSet<_> = HashSet::from([(0, 0)]);
+    while !touched.is_empty() {
+        fn merge(neighbor: &mut (u8, Option<usize>), here: usize) -> bool {
+            if let (step, Some(ref mut cost)) = neighbor {
+                if *cost > here + *step as usize {
+                    *cost = here + *step as usize;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                neighbor.1 = Some(here + neighbor.0 as usize);
+                true
+            }
+        }
+        let mut next = HashSet::new();
+        for (x, y) in touched {
+            let here = grid[y][x].1.unwrap();
+            if x > 0 && merge(&mut grid[y][x - 1], here) {
+                next.insert((x - 1, y));
+            }
+            if x + 1 < grid[y].len() && merge(&mut grid[y][x + 1], here) {
+                next.insert((x + 1, y));
+            };
+            if y > 0 && merge(&mut grid[y - 1][x], here) {
+                next.insert((x, y - 1));
+            }
+            if y + 1 < grid.len() && merge(&mut grid[y + 1][x], here) {
+                next.insert((x, y + 1));
+            };
+        }
+        touched = next;
+    }
+    let y = grid.len() - 1;
+    grid[y][grid[y].len() - 1].1
+}
+
+fn day15(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let mut grid: Vec<Vec<(u8, Option<usize>)>> = lines
+        .iter()
+        .map(|line| {
+            line.chars()
+                .map(|ch| ((ch as u8 - '0' as u8), None))
+                .collect()
+        })
+        .collect();
+    if gold {
+        grid = (0..5)
+            .flat_map(|addy| {
+                grid.clone().into_iter().map(move |row| {
+                    (0..5)
+                        .flat_map(|addx| {
+                            row.clone()
+                                .into_iter()
+                                .map(move |(step, _)| ((step + addx + addy - 1) % 9 + 1, None))
+                        })
+                        .collect()
+                })
+            })
+            .collect();
+    }
+
+    bfs(&mut grid).unwrap()
 }
 
 fn day16(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
@@ -741,12 +801,20 @@ fn main() {
                     .split(|s| s.is_empty())
                     .filter(|g| !g.is_empty())
                     .collect();
+                let timed = |f: &mut dyn FnMut() -> usize| {
+                    let start = Instant::now();
+                    let ret = f();
+                    (start.elapsed(), ret)
+                };
+
                 for gold in [false, true] {
-                    print!(" {0:1$}", solution(lines, &groups, gold), wide);
+                    let (time, value) = timed(&mut || solution(lines, &groups, gold));
+
+                    print!(" {0:1$} ({2:8}us)", value, wide, time.as_micros());
                 }
             } else {
                 for _gold in [false, true] {
-                    print!(" {0:>1$}", "-", wide);
+                    print!(" {0:>1$} ({2:>8}us)", "-", wide, "-");
                 }
             }
         }
