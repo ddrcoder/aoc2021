@@ -716,12 +716,152 @@ fn day15(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     bfs(&mut grid).unwrap()
 }
 
-fn day16(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn read(i: &mut usize, bits: &[u8], n: usize) -> usize {
+    let mut r = 0;
+    for _ in 0..n {
+        r = r * 2 + bits[*i] as usize;
+        *i += 1;
+    }
+    r
+}
+fn process(bits: &[u8], i: &mut usize, limit: Option<usize>) -> Vec<usize> {
+    let mut n = 0;
+    let mut ret = vec![];
+    while *i < bits.len() && (limit.is_none() || n < limit.unwrap()) {
+        n += 1;
+        let version = read(i, bits, 3);
+        eprintln!("Read version {}", version);
+        ret.push(match read(i, bits, 3) {
+            4 => {
+                let mut v = 0;
+                while read(i, bits, 1) == 1 {
+                    v = (v << 4) + read(i, bits, 4);
+                    eprintln!("Reading literal {}", v);
+                }
+                v = (v << 4) + read(i, bits, 4);
+                eprintln!("Read literal {}", v);
+                //while *i & 3 != 0 { *i += 1; }
+                v
+            }
+            a => {
+                eprintln!("Read op {}", a);
+                eprintln!("{{");
+
+                let inner = if read(i, bits, 1) == 0 {
+                    let length = read(i, bits, 15);
+                    eprintln!("Bit length: {}", length);
+                    let end = *i + length;
+                    let ret = process(&bits[0..end], i, None);
+                    assert_eq!(*i, end);
+                    ret
+                } else {
+                    let n = read(i, bits, 11);
+                    eprintln!("Count: {}", n);
+                    process(bits, i, Some(n))
+                };
+                eprintln!("}}");
+                let values = inner.iter().cloned();
+                let (op, r) = match a {
+                    0 => ("sum", values.sum()),
+                    1 => ("", values.product()),
+                    2 => ("", values.min().unwrap()),
+                    3 => ("", values.max().unwrap()),
+                    5 => ("gt", {
+                        assert_eq!(inner.len(), 2);
+                        if inner[0] > inner[1] {
+                            1
+                        } else {
+                            0
+                        }
+                    }),
+                    6 => ("lt", {
+                        assert_eq!(inner.len(), 2);
+                        if inner[0] < inner[1] {
+                            1
+                        } else {
+                            0
+                        }
+                    }),
+                    7 => ("eq", {
+                        assert_eq!(inner.len(), 2);
+                        if inner[0] == inner[1] {
+                            1
+                        } else {
+                            0
+                        }
+                    }),
+                    o => {
+                        panic!("unexpected: {}", o)
+                    }
+                };
+                eprintln!("{} of {:?} is {}", op, &inner, r);
+                r
+            }
+        });
+    }
+    ret
 }
 
-fn day17(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day16(lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
+    let bits: Vec<_> = lines[0]
+        .chars()
+        .map(|ch| {
+            if ch >= 'A' {
+                ch as u8 - 'A' as u8 + 10
+            } else if ch >= '0' {
+                ch as u8 - '0' as u8
+            } else {
+                panic!();
+            }
+        })
+        .flat_map(|n| (0..4).rev().map(move |b| (n >> b) & 1))
+        .collect();
+    let r = process(&bits, &mut 0, Some(1));
+    assert_eq!(r.len(), 1);
+    eprintln!("----------");
+    r[0]
+}
+
+fn day17(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let (xl, xh, yl, yh) = scan_fmt!(
+        lines[0],
+        "target area: x={}..{}, y={}..{}",
+        i64,
+        i64,
+        i64,
+        i64
+    )
+    .ok()
+    .unwrap();
+    // TODO: Actually inform the plausible ranges from inputs; unsure if x range
+    // is ever negative.
+    let mut solutions = (-200..500)
+        .rev()
+        .flat_map(|vy0| (0..400).map(move |vx0| (vx0, vy0)))
+        .flat_map(|(vx0, vy0): (i64, i64)| {
+            let (mut x, mut y) = (0, 0);
+            let (mut vx, mut vy) = (vx0, vy0);
+            let mut max_y = if vy0 <= 0 { Some(0) } else { None };
+            loop {
+                x += vx;
+                y += vy;
+                vy -= 1;
+                vx -= vx.signum();
+                if vy == 0 {
+                    max_y = Some(y);
+                }
+                if y < yl || x > xh || (vx == 0 && x < xl) {
+                    return None;
+                } else if x >= xl && y <= yh {
+                    return Some((vx0, vy0, max_y.unwrap()));
+                }
+            }
+        });
+    if gold {
+        solutions.count()
+    } else {
+        solutions.next().unwrap().2 as usize
+    }
 }
 
 fn day18(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
@@ -777,7 +917,12 @@ fn main() {
     let wide = 20;
     println!(
         "{1:>2}: {2:>0$} {3:>0$} {4:>0$} {5:>0$}",
-        wide, "#", "test_silver", "test_gold", "silver", "gold"
+        wide + 13,
+        "#",
+        "test_silver",
+        "test_gold",
+        "silver",
+        "gold"
     );
     for (i, solution) in solutions.iter().enumerate() {
         let n = i + 1;
