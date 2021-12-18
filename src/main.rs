@@ -870,146 +870,135 @@ enum Snail {
     Pair(Box<Snail>, Box<Snail>),
 }
 
-fn parse_snail_rec(text: &mut &str) -> Snail {
-    if text.starts_with('[') {
-        *text = &(*text)[1..];
-        let l = parse_snail_rec(text);
-        assert!(text.starts_with(','));
-        *text = &(*text)[1..]; // ,
-        let r = parse_snail_rec(text);
-        *text = &(*text)[1..];
-        Snail::Pair(Box::new(l), Box::new(r))
-    } else {
-        let n = text.chars().next().unwrap() as u8 - '0' as u8;
-        *text = &(*text)[1..];
-        Snail::Leaf(n)
-    }
-}
-
-fn parse_snail(mut text: &str) -> Snail {
-    parse_snail_rec(&mut text)
-}
-
-fn add_right(snail: &mut Snail, add: u8) -> bool {
-    match snail {
-        Snail::Pair(left, right) => add_right(left, add) || add_right(right, add),
-        Snail::Leaf(n) => {
-            *n += add;
-            true
+impl Snail {
+    fn parse(mut text: &str) -> Snail {
+        fn rec(text: &mut &str) -> Snail {
+            if text.starts_with('[') {
+                *text = &text[1..];
+                let l = rec(text);
+                assert!(text.starts_with(','));
+                *text = &text[1..]; // ,
+                let r = rec(text);
+                assert!(text.starts_with(']'));
+                *text = &text[1..]; // ']'
+                Snail::Pair(Box::new(l), Box::new(r))
+            } else {
+                let n = text.chars().next().unwrap() as u8 - '0' as u8;
+                *text = &text[1..];
+                Snail::Leaf(n)
+            }
         }
-    }
-}
 
-fn add_left(snail: &mut Snail, add: u8) -> bool {
-    match snail {
-        Snail::Pair(left, right) => add_left(right, add) || add_left(left, add),
-        Snail::Leaf(n) => {
-            *n += add;
-            true
-        }
+        rec(&mut text)
     }
-}
-fn explode_rec(snail: &mut Snail, depth: usize) -> (Option<u8>, Option<u8>, bool) {
-    match snail {
-        Snail::Pair(a, b) => match (a.as_mut(), b.as_mut()) {
-            (Snail::Leaf(l), Snail::Leaf(r)) if depth >= 4 => {
-                let l = *l;
-                let r = *r;
-                *snail = Snail::Leaf(0);
-                (Some(l), Some(r), true)
-            }
-            (Snail::Leaf(l), pair) => {
-                let (left_carry, right_carry, exploded) = explode_rec(pair, depth + 1);
-                if let Some(left_add) = left_carry {
-                    *l += left_add;
-                }
-                (None, right_carry, exploded)
-            }
-            (pair, Snail::Leaf(r)) => {
-                let (left_carry, right_carry, exploded) = explode_rec(pair, depth + 1);
-                if let Some(right_add) = right_carry {
-                    *r += right_add;
-                }
-                (left_carry, None, exploded)
-            }
-            (left, right) => {
-                let (left_carry, right_carry, exploded) = explode_rec(left, depth + 1);
-                if exploded {
-                    if let Some(right_add) = right_carry {
-                        add_right(right, right_add);
-                    }
-                    (left_carry, None, true)
-                } else {
-                    let (left_carry, right_carry, exploded) = explode_rec(right, depth + 1);
-                    if exploded {
-                        if let Some(left_add) = left_carry {
-                            add_left(left, left_add);
+
+    pub fn add(a: Snail, b: Snail) -> Snail {
+        fn explode(snail: &mut Snail) -> bool {
+            fn rec(snail: &mut Snail, depth: usize) -> (Option<u8>, Option<u8>, bool) {
+                match snail {
+                    Snail::Pair(a, b) => match (a.as_mut(), b.as_mut()) {
+                        (Snail::Leaf(l), Snail::Leaf(r)) if depth >= 4 => {
+                            let ret = (Some(*l), Some(*r), true);
+                            *snail = Snail::Leaf(0);
+                            ret
                         }
-                        (None, right_carry, true)
-                    } else {
-                        (None, None, false)
-                    }
+                        (left, right) => {
+                            let (left_carry, right_carry, exploded) = rec(left, depth + 1);
+                            if exploded {
+                                if let Some(right_add) = right_carry {
+                                    right.leftmost_add(right_add);
+                                }
+                                (left_carry, None, true)
+                            } else {
+                                let (left_carry, right_carry, exploded) = rec(right, depth + 1);
+                                if exploded {
+                                    if let Some(left_add) = left_carry {
+                                        left.rightmost_add(left_add);
+                                    }
+                                    (None, right_carry, true)
+                                } else {
+                                    (None, None, false)
+                                }
+                            }
+                        }
+                    },
+                    _ => (None, None, false),
                 }
             }
-        },
-        _ => (None, None, false),
-    }
-}
-
-fn explode(snail: &mut Snail) -> bool {
-    explode_rec(snail, 0).2
-}
-
-fn split(snail: &mut Snail) -> bool {
-    match snail {
-        Snail::Pair(left, right) => split(&mut *left) || split(&mut *right),
-        Snail::Leaf(n) if *n >= 10 => {
-            let left = *n / 2;
-            let right = *n - left;
-            *snail = Snail::Pair(Box::new(Snail::Leaf(left)), Box::new(Snail::Leaf(right)));
-            true
+            rec(snail, 0).2
         }
-        _ => false,
-    }
-}
-fn magnitude(snail: Snail) -> usize {
-    match snail {
-        Snail::Pair(left, right) => magnitude(*left) * 3 + magnitude(*right) * 2,
-        Snail::Leaf(n) => n as usize,
-    }
-}
 
-fn add_snails(a: Snail, b: Snail) -> Snail {
-    let mut snail = Snail::Pair(Box::new(a), Box::new(b));
-    loop {
-        if explode(&mut snail) {
-            //eprintln!("Exploded: {:?}", &snail);
-        } else if split(&mut snail) {
-            //eprintln!("Split: {:?}", &snail);
-        } else {
-            //eprintln!("Stable! {:?}", &snail);
-            return snail;
+        fn split(snail: &mut Snail) -> bool {
+            match snail {
+                Snail::Pair(left, right) => split(&mut *left) || split(&mut *right),
+                Snail::Leaf(n) if *n >= 10 => {
+                    *snail = Snail::Pair(
+                        Box::new(Snail::Leaf(*n / 2)),
+                        Box::new(Snail::Leaf(*n - *n / 2)),
+                    );
+                    true
+                }
+                _ => false,
+            }
+        }
+
+        let mut snail = Snail::Pair(Box::new(a), Box::new(b));
+        loop {
+            if explode(&mut snail) {
+                //eprintln!("Exploded: {:?}", &snail);
+            } else if split(&mut snail) {
+                //eprintln!("Split: {:?}", &snail);
+            } else {
+                //eprintln!("Stable! {:?}", &snail);
+                return snail;
+            }
         }
     }
+
+    fn leftmost_add(&mut self, add: u8) -> bool {
+        match self {
+            Snail::Pair(left, _) => left.leftmost_add(add),
+            Snail::Leaf(n) => {
+                *n += add;
+                true
+            }
+        }
+    }
+
+    fn rightmost_add(&mut self, add: u8) {
+        match self {
+            Snail::Pair(_, right) => right.rightmost_add(add),
+            Snail::Leaf(n) => {
+                *n += add;
+            }
+        }
+    }
+
+    fn magnitude(&self) -> usize {
+        match self {
+            Snail::Pair(left, right) => left.magnitude() * 3 + right.magnitude() * 2,
+            Snail::Leaf(n) => *n as usize,
+        }
+    }
+}
+
+fn pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
+    (0..items.len()).flat_map(move |a| {
+        (0..items.len())
+            .filter(move |b| *b != a)
+            .map(move |b| (&items[a], &items[b]))
+    })
 }
 
 fn day18(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let snails = lines.iter().cloned().map(Snail::parse);
     if gold {
-        (0..lines.len())
-            .flat_map(move |a| {
-                (0..lines.len())
-                    .filter(move |b| *b != a)
-                    .map(move |b| (a, b))
-            })
-            .map(|(a, b)| magnitude(add_snails(parse_snail(lines[a]), parse_snail(lines[b]))))
+        pairs(&Vec::from_iter(snails))
+            .map(|(a, b)| Snail::add(a.clone(), b.clone()).magnitude())
             .max()
             .unwrap()
     } else {
-        let mut snail = parse_snail(lines[0]);
-        for line in &lines[1..] {
-            snail = add_snails(snail, parse_snail(line));
-        }
-        magnitude(snail)
+        snails.reduce(Snail::add).unwrap().magnitude()
     }
 }
 
