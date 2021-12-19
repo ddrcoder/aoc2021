@@ -1029,42 +1029,8 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     fn transform_all(samples: &Vec<P>, transform: &Transform) -> Vec<P> {
         samples.iter().map(|v| transform * v).collect()
     }
-    fn try_align(a: &HashSet<P>, b: &Vec<P>) -> Option<Transform> {
-        let rotations = [
-            //
-            matrix![1,0,0, 0; 0,1,0, 0; 0,0,1,0; 0,0,0,1],
-            matrix![1,0,0, 0; 0,0,1, 0; 0,1,0,0; 0,0,0,1],
-            matrix![0,1,0, 0; 1,0,0, 0; 0,0,1,0; 0,0,0,1],
-            matrix![0,1,0, 0; 0,0,1, 0; 1,0,0,0; 0,0,0,1],
-            matrix![0,0,1, 0; 1,0,0, 0; 0,1,0,0; 0,0,0,1],
-            matrix![0,0,1, 0; 0,1,0, 0; 1,0,0,0; 0,0,0,1],
-            //
-        ];
-        let signs = [
-            vector![0 + 1, 0 + 1, 0 + 1, 1],
-            vector![0 + 1, 0 + 1, 0 - 1, 1],
-            vector![0 + 1, 0 - 1, 0 + 1, 1],
-            vector![0 + 1, 0 - 1, 0 - 1, 1],
-            vector![0 - 1, 0 + 1, 0 + 1, 1],
-            vector![0 - 1, 0 + 1, 0 - 1, 1],
-            vector![0 - 1, 0 - 1, 0 + 1, 1],
-            vector![0 - 1, 0 - 1, 0 - 1, 1],
-        ];
-        let transforms: Vec<_> = rotations
-            .iter()
-            .flat_map(|rotation| {
-                signs.iter().map(|sign| {
-                    let mut transform = Transform::zero();
-                    for i in 0..4 {
-                        for j in 0..4 {
-                            transform[(i, j)] = rotation[(i, j)] * sign[j];
-                        }
-                    }
-                    transform
-                })
-            })
-            .collect();
-        for transform in &transforms {
+    fn try_align(a: &HashSet<P>, b: &Vec<P>, transforms: &[Transform]) -> Option<Transform> {
+        for transform in transforms {
             if let Some(offset) = find_pivot(a, &transform_all(b, transform)) {
                 let mut ret = *transform;
                 ret[(0, 3)] = offset[0];
@@ -1076,6 +1042,52 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
 
         None
     }
+    let rotations = [
+        //
+        matrix![1,0,0, 0; 0,1,0, 0; 0,0,1,0; 0,0,0,1],
+        matrix![1,0,0, 0; 0,0,1, 0; 0,1,0,0; 0,0,0,1],
+        matrix![0,1,0, 0; 1,0,0, 0; 0,0,1,0; 0,0,0,1],
+        matrix![0,1,0, 0; 0,0,1, 0; 1,0,0,0; 0,0,0,1],
+        matrix![0,0,1, 0; 1,0,0, 0; 0,1,0,0; 0,0,0,1],
+        matrix![0,0,1, 0; 0,1,0, 0; 1,0,0,0; 0,0,0,1],
+        //
+    ];
+    let signs = [
+        vector![0 + 1, 0 + 1, 0 + 1, 1],
+        vector![0 + 1, 0 + 1, 0 - 1, 1],
+        vector![0 + 1, 0 - 1, 0 + 1, 1],
+        vector![0 + 1, 0 - 1, 0 - 1, 1],
+        vector![0 - 1, 0 + 1, 0 + 1, 1],
+        vector![0 - 1, 0 + 1, 0 - 1, 1],
+        vector![0 - 1, 0 - 1, 0 + 1, 1],
+        vector![0 - 1, 0 - 1, 0 - 1, 1],
+    ];
+    fn determinate3(mat: &Matrix<i16, 4, 4>) -> i16 {
+        let dns = mat[(0, 0)] * mat[(1, 1)] * mat[(2, 2)]
+            + mat[(0, 1)] * mat[(1, 2)] * mat[(2, 0)]
+            + mat[(0, 2)] * mat[(1, 0)] * mat[(2, 1)];
+        let ups = mat[(2, 0)] * mat[(1, 1)] * mat[(0, 2)]
+            + mat[(2, 1)] * mat[(1, 2)] * mat[(0, 0)]
+            + mat[(2, 2)] * mat[(1, 0)] * mat[(0, 1)];
+        dns - ups
+    }
+
+    let possible_transforms: Vec<_> = rotations
+        .iter()
+        .flat_map(|rotation| {
+            signs.iter().map(|sign| {
+                let mut transform = Transform::zero();
+                for i in 0..4 {
+                    for j in 0..4 {
+                        transform[(i, j)] = rotation[(i, j)] * sign[j];
+                    }
+                }
+                transform
+            })
+        })
+        .filter(|t| determinate3(t) > 0)
+        .collect();
+    assert_eq!(possible_transforms.len(), 24);
     let mut scanners: Vec<Vec<P>> = groups
         .iter()
         .map(|g| {
@@ -1090,7 +1102,7 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     let mut transforms = vec![];
     'outer: while !scanners.is_empty() {
         for i in 0..scanners.len() {
-            if let Some(transform) = try_align(&beacons, &scanners[i]) {
+            if let Some(transform) = try_align(&beacons, &scanners[i], &possible_transforms) {
                 let found = transform_all(&scanners.remove(i), &transform);
                 transforms.push(transform);
                 beacons.extend(found.into_iter());
