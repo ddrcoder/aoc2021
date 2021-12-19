@@ -1,13 +1,15 @@
 #[macro_use]
 extern crate scan_fmt;
 extern crate clap;
+#[macro_use]
+extern crate vectrix;
 
 use clap::Parser;
-use std::cmp::max;
-use std::cmp::min;
+use std::cmp::{max, min, Ordering};
 use std::hash::Hash;
 use std::str::FromStr;
 use std::time::Instant;
+use vectrix::RowVector;
 //use std::hash::Hash;
 use std::{collections::VecDeque, fmt::Debug};
 
@@ -17,6 +19,7 @@ use std::fs::File;
 use std::io::Read;
 use std::iter::once;
 //use std::iter::{once, Iterator};
+use vectrix::{Matrix, Vector};
 
 fn day1(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     // Lines -> numbers.
@@ -1002,9 +1005,117 @@ fn day18(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     }
 }
 
-fn day19(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+    type P = Vector<i16, 4>;
+    type Transform = Matrix<i16, 4, 4>;
+
+    fn find_pivot(a: &HashSet<P>, b: &[P]) -> Option<P> {
+        for x in a {
+            for y in b {
+                let delta = x - y;
+                if b.iter()
+                    .map(|z| *z + delta)
+                    .filter(|p| a.contains(p))
+                    .count()
+                    >= 12
+                {
+                    return Some(delta);
+                }
+            }
+        }
+
+        None
+    }
+    fn transform_all(samples: &Vec<P>, transform: &Transform) -> Vec<P> {
+        samples.iter().map(|v| transform * v).collect()
+    }
+    fn try_align(a: &HashSet<P>, b: &Vec<P>) -> Option<Transform> {
+        let rotations = [
+            //
+            matrix![1,0,0, 0; 0,1,0, 0; 0,0,1,0; 0,0,0,1],
+            matrix![1,0,0, 0; 0,0,1, 0; 0,1,0,0; 0,0,0,1],
+            matrix![0,1,0, 0; 1,0,0, 0; 0,0,1,0; 0,0,0,1],
+            matrix![0,1,0, 0; 0,0,1, 0; 1,0,0,0; 0,0,0,1],
+            matrix![0,0,1, 0; 1,0,0, 0; 0,1,0,0; 0,0,0,1],
+            matrix![0,0,1, 0; 0,1,0, 0; 1,0,0,0; 0,0,0,1],
+            //
+        ];
+        let signs = [
+            vector![0 + 1, 0 + 1, 0 + 1, 1],
+            vector![0 + 1, 0 + 1, 0 - 1, 1],
+            vector![0 + 1, 0 - 1, 0 + 1, 1],
+            vector![0 + 1, 0 - 1, 0 - 1, 1],
+            vector![0 - 1, 0 + 1, 0 + 1, 1],
+            vector![0 - 1, 0 + 1, 0 - 1, 1],
+            vector![0 - 1, 0 - 1, 0 + 1, 1],
+            vector![0 - 1, 0 - 1, 0 - 1, 1],
+        ];
+        let transforms: Vec<_> = rotations
+            .iter()
+            .flat_map(|rotation| {
+                signs.iter().map(|sign| {
+                    let mut transform = Transform::zero();
+                    for i in 0..4 {
+                        for j in 0..4 {
+                            transform[(i, j)] = rotation[(i, j)] * sign[j];
+                        }
+                    }
+                    transform
+                })
+            })
+            .collect();
+        for transform in &transforms {
+            if let Some(offset) = find_pivot(a, &transform_all(b, transform)) {
+                let mut ret = *transform;
+                ret[(0, 3)] = offset[0];
+                ret[(1, 3)] = offset[1];
+                ret[(2, 3)] = offset[2];
+                return Some(ret);
+            }
+        }
+
+        None
+    }
+    let mut scanners: Vec<Vec<P>> = groups
+        .iter()
+        .map(|g| {
+            g[1..]
+                .iter()
+                .map(|line| scan_fmt!(line, "{},{},{}", i16, i16, i16).ok().unwrap())
+                .map(|(a, b, c)| P::from([a, b, c, 1]))
+                .collect()
+        })
+        .collect();
+    let mut beacons: HashSet<_> = scanners.pop().unwrap().into_iter().collect();
+    let mut transforms = vec![];
+    'outer: while !scanners.is_empty() {
+        for i in 0..scanners.len() {
+            if let Some(transform) = try_align(&beacons, &scanners[i]) {
+                let found = transform_all(&scanners.remove(i), &transform);
+                transforms.push(transform);
+                beacons.extend(found.into_iter());
+                continue 'outer;
+            }
+        }
+        panic!("Not all overlapping!");
+    }
+    if gold {
+        pairs(&transforms)
+            .map(|(a, b)| {
+                (a - b)
+                    .column(3)
+                    .as_slice()
+                    .iter()
+                    .map(|v| v.abs() as usize)
+                    .sum()
+            })
+            .max()
+            .unwrap()
+    } else {
+        beacons.len()
+    }
 }
+
 fn day20(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
