@@ -985,31 +985,60 @@ impl Snail {
     }
 }
 
+/*
 fn pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
     (0..items.len()).flat_map(move |a| {
         (0..items.len())
             .filter(move |b| *b != a)
             .map(move |b| (&items[a], &items[b]))
     })
+}*/
+
+fn pairs<'a, T: 'a, I: Iterator<Item = &'a T> + 'a + Clone>(
+    items: I,
+) -> impl Iterator<Item = (&'a T, &'a T)> {
+    items.clone().flat_map(move |a| {
+        items
+            .clone()
+            .filter(|b| (*b as *const T) < (a as *const T))
+            .map(move |b| (a, b))
+    })
 }
 
 fn day18(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
-    let snails = lines.iter().cloned().map(Snail::parse);
+    let snails: Vec<_> = lines.iter().cloned().map(Snail::parse).collect();
     if gold {
-        pairs(&Vec::from_iter(snails))
+        pairs(snails.iter())
+            .flat_map(|(a, b)| once((a, b)).chain(once((b, a))))
             .map(|(a, b)| Snail::add(a.clone(), b.clone()).magnitude())
             .max()
             .unwrap()
     } else {
-        snails.reduce(Snail::add).unwrap().magnitude()
+        snails.into_iter().reduce(Snail::add).unwrap().magnitude()
     }
 }
 
-fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
-    type P = Vector<i16, 4>;
-    type Transform = Matrix<i16, 4, 4>;
+/*
+type Point = Vector<i16, 4>;
+type Vector = Vector<i16, 4>;
+type Transform = Matrix<i16, 4, 4>;
+struct ScannerReport {
+    points: Vec<Position>,
+    vectors: Vec<V>,
 
-    fn find_pivot(a: &HashSet<P>, b: &[P]) -> Option<P> {
+
+}
+
+impl ScannerReport {
+    fn new() -> Self {}
+}
+*/
+
+fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+    type Position = Vector<i16, 4>;
+    type Direction = Vector<i16, 4>;
+    type Transform = Matrix<i16, 4, 4>;
+    fn find_pivot(a: &HashSet<Position>, b: &[Position]) -> Option<Position> {
         for x in a {
             for y in b {
                 let delta = x - y;
@@ -1026,10 +1055,14 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
 
         None
     }
-    fn transform_all(samples: &Vec<P>, transform: &Transform) -> Vec<P> {
+    fn transform_all(samples: &Vec<Position>, transform: &Transform) -> Vec<Position> {
         samples.iter().map(|v| transform * v).collect()
     }
-    fn try_align(a: &HashSet<P>, b: &Vec<P>, transforms: &[Transform]) -> Option<Transform> {
+    fn try_align(
+        a: &HashSet<Position>,
+        b: &Vec<Position>,
+        transforms: &[Transform],
+    ) -> Option<Transform> {
         for transform in transforms {
             if let Some(offset) = find_pivot(a, &transform_all(b, transform)) {
                 let mut ret = *transform;
@@ -1088,13 +1121,13 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
         .filter(|t| determinate3(t) > 0)
         .collect();
     assert_eq!(possible_transforms.len(), 24);
-    let mut scanners: Vec<Vec<P>> = groups
+    let mut scanners: Vec<Vec<Position>> = groups
         .iter()
         .map(|g| {
             g[1..]
                 .iter()
                 .map(|line| scan_fmt!(line, "{},{},{}", i16, i16, i16).ok().unwrap())
-                .map(|(a, b, c)| P::from([a, b, c, 1]))
+                .map(|(a, b, c)| Position::from([a, b, c, 1]))
                 .collect()
         })
         .collect();
@@ -1111,8 +1144,20 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
         }
         panic!("Not all overlapping!");
     }
+    fn diff_invariant((a, b): (&Position, &Position)) -> Direction {
+        let mut d = a - b;
+        let s = d.as_mut_slice();
+        for p in s.iter_mut() {
+            *p = p.abs();
+        }
+        s.sort();
+        d
+    }
+    let edges: HashSet<_> = pairs(beacons.iter()).map(diff_invariant).collect();
+    assert_eq!(edges.len(), pairs(beacons.iter()).count());
+
     if gold {
-        pairs(&transforms)
+        pairs(transforms.iter())
             .map(|(a, b)| {
                 (a - b)
                     .column(3)
