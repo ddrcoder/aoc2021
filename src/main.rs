@@ -1210,100 +1210,64 @@ fn day21(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
                 .unwrap()
         })
         .collect();
-    if !gold {
-        let mut positions = positions;
-        let mut rolls = 0;
-        let mut scores = vec![0; positions.len()];
-        let mut roll = || {
-            rolls += 1;
-            (rolls - 1) % 100 + 1
-        };
-        loop {
-            for player in [0, 1] {
-                let p = &mut positions[player];
-                let distance: usize = (0..3).map(|_| roll()).sum();
-                *p += distance;
-                *p = (*p - 1) % 10 + 1;
-                let s = &mut scores[player];
-                *s += *p;
-                if *s >= 1000 {
-                    return scores[1 - player] * rolls;
-                }
-            }
-        }
-    } else {
-        let mut die_paths = [0; 7];
-        for a in 0..3 {
-            for b in 0..3 {
-                for c in 0..3 {
-                    die_paths[a + b + c] += 1;
-                }
-            }
-        }
-
-        #[derive(PartialEq, Eq, Hash, Default, Clone, Debug)]
-        struct WorldState {
-            turn: u8,
-            positions: [u8; 2],
-            scores: [u8; 2],
-            won: bool,
-        }
-        let mut state_counts = HashMap::from([(
-            WorldState {
-                turn: 0,
-                positions: [positions[0] as u8, positions[1] as u8],
-                scores: [0, 0],
-                won: false,
-            },
-            1,
-        )]);
-        loop {
-            let mut new_state_counts = HashMap::new();
-            let mut changed = false;
-            for (state, count) in state_counts {
-                if state.won {
-                    new_state_counts.insert(state, count);
-                    continue;
-                }
-                changed = true;
-                for die_sum in 3..=9 {
-                    let roll_paths = die_paths[die_sum - 3];
-                    let mut new_state = state.clone();
-                    let player = state.turn as usize;
-                    let position = &mut new_state.positions[player];
-                    let score = &mut new_state.scores[player];
-                    *position = (*position + die_sum as u8 - 1) % 10 + 1;
-                    *score += *position;
-                    if *score >= 21 {
-                        new_state.won = true;
-                    } else {
-                        new_state.turn = 1 - state.turn;
-                    }
-
-                    *new_state_counts.entry(new_state).or_insert(0) += count * roll_paths;
-                }
-            }
-            state_counts = new_state_counts;
-            if !changed {
-                break;
-            }
-            /*
-            actual;
-                208892670831810,
-                168544353172778,
-            expected:
-                444356092776315
-                341960390180808
-            */
-        }
-        let mut universe_wins = [0; 2];
-        dbg!(state_counts.len());
-        for (state, count) in state_counts {
-            universe_wins[state.turn as usize] += count;
-        }
-        dbg!(&universe_wins);
-        universe_wins.into_iter().max().unwrap()
+    #[derive(PartialEq, Eq, Hash, Default, Clone, Debug)]
+    struct WorldState {
+        turn: u8,
+        positions: [u8; 2],
+        scores: [u16; 2],
     }
+    let mut quantum_paths = [(0, 0); 7];
+    for a in 0..3 {
+        for b in 0..3 {
+            for c in 0..3 {
+                let sum = a + b + c;
+                quantum_paths[sum].1 = sum + 3;
+                quantum_paths[sum].0 += 1;
+            }
+        }
+    }
+
+    let mut universe_wins = [0; 2];
+    let mut open_worlds = HashMap::from([(
+        WorldState {
+            turn: 0,
+            positions: [positions[0] as u8, positions[1] as u8],
+            scores: [0, 0],
+        },
+        1,
+    )]);
+    let winning_score = if gold { 21 } else { 1000 };
+    let mut rolls = 0;
+    while !open_worlds.is_empty() {
+        let mut new_worlds = HashMap::new();
+        for (state, count) in open_worlds {
+            let deterministic_paths = [(1, (rolls * 3 + 5) % 100 + 1)];
+            let dice = if gold {
+                &quantum_paths[..]
+            } else {
+                rolls += 3;
+                &deterministic_paths[..]
+            };
+            for (roll_paths, die_sum) in dice {
+                let universes = count * roll_paths;
+                let mut state = state.clone();
+                let p = state.turn as usize;
+                state.positions[p] = (state.positions[p] + *die_sum as u8 - 1) % 10 + 1;
+                state.scores[p] += state.positions[p] as u16;
+                if state.scores[p] >= winning_score {
+                    if !gold {
+                        return rolls * state.scores[1 - p] as usize;
+                    }
+                    universe_wins[p] += universes;
+                } else {
+                    state.turn = 1 - state.turn;
+                    *new_worlds.entry(state).or_insert(0) += universes;
+                }
+            }
+        }
+        open_worlds = new_worlds;
+    }
+    universe_wins.into_iter().max().unwrap()
 }
 
 fn day22(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
