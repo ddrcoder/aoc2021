@@ -1212,36 +1212,36 @@ fn covering_range<T: Ord + From<bool> + Copy, I: Iterator<Item = T>>(iter: I) ->
 }
 
 fn day20(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
-    let to_lit = |line: &str| line.chars().map(|ch| ch == '#').collect::<Vec<bool>>();
-    let pattern: Vec<bool> = to_lit(groups[0][0]);
-    let image: Vec<_> = groups[1].iter().cloned().map(to_lit).collect();
-    let edge = max(image[0].len(), image.len()) as i64;
-    let mut diff_lit: HashSet<_> = image
-        .into_iter()
-        .enumerate()
-        .flat_map(|(y, row)| {
-            row.into_iter()
-                .enumerate()
-                .filter(|(x, lit)| *lit)
-                .map(move |(x, _)| (x as i64, y as i64))
-        })
+    let pattern: Vec<bool> = groups[0][0].chars().map(|ch| ch == '#').collect();
+    let pattern = &pattern;
+    let mut diff_image: Vec<bool> = groups[1]
+        .iter()
+        .cloned()
+        .flat_map(|line: &str| line.chars().map(|ch| ch == '#'))
         .collect();
+    let mut width = groups[1][0].chars().count();
+    let mut height = diff_image.len() / width;
     let mut rest = false;
-    for step in 1..=(if gold { 50 } else { 2 }) {
+    for _step in 1..=(if gold { 50 } else { 2 }) {
         let new_rest = pattern[if rest { 511 } else { 0 }];
-        diff_lit = self_cross((0 - step)..(edge + step))
-            .filter(|(x, y)| {
-                let index = self_cross(-1..=1)
-                    .map(|(dy, dx)| (x + dx, y + dy))
-                    .map(|(nx, ny)| diff_lit.contains(&(nx, ny)) ^ rest)
+        let di = &diff_image;
+        diff_image = (0..(height + 2))
+            .flat_map(|y| {
+                (0..(width + 2)).map(move |x| {
+                    let index = self_cross((0..=2).rev())
+                    .map(|(sy, sx)| if x >= sx && y >= sy && x-sx < width && y-sy < height {
+                            di[(y-sy) * width + x - sx]}else{false}^rest)
                     .fold(0, |n, lit| n * 2 + lit as usize);
-                let lit = pattern[index] ^ new_rest;
-                lit
+                    let lit = pattern[index] ^ new_rest;
+                    lit
+                })
             })
             .collect();
+        width += 2;
+        height += 2;
         rest = new_rest;
     }
-    diff_lit.len()
+    diff_image.into_iter().filter(|x| *x).count()
 }
 
 fn day21(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
