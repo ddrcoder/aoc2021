@@ -985,15 +985,6 @@ impl Snail {
     }
 }
 
-/*
-fn pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
-    (0..items.len()).flat_map(move |a| {
-        (0..items.len())
-            .filter(move |b| *b != a)
-            .map(move |b| (&items[a], &items[b]))
-    })
-}*/
-
 fn pairs<'a, T: 'a, I: Iterator<Item = &'a T> + 'a + Clone>(
     items: I,
 ) -> impl Iterator<Item = (&'a T, &'a T)> {
@@ -1018,26 +1009,76 @@ fn day18(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     }
 }
 
-/*
-type Point = Vector<i16, 4>;
-type Vector = Vector<i16, 4>;
+type Position = Vector<i16, 4>;
+type RelativePosition = Vector<i16, 4>;
+type Direction = Vector<i16, 4>;
 type Transform = Matrix<i16, 4, 4>;
-struct ScannerReport {
-    points: Vec<Position>,
-    vectors: Vec<V>,
-
-
+struct Scanner {
+    beacons: Vec<Position>,
+    vectors: HashSet<Direction>,
 }
 
-impl ScannerReport {
-    fn new() -> Self {}
+impl Scanner {
+    fn parse(lines: &[&str]) -> Self {
+        let beacons: Vec<_> = lines
+            .iter()
+            .map(|line| scan_fmt!(line, "{},{},{}", i16, i16, i16).ok().unwrap())
+            .map(|(a, b, c)| Position::from([a, b, c, 1]))
+            .collect();
+        let vectors: HashSet<_> = pairs(beacons.iter()).map(Self::diff_invariant).collect();
+        // Non-unique vectors possible, but unsupported.
+        assert_eq!(vectors.len(), beacons.len() * (beacons.len() - 1) / 2);
+        dbg!(&vectors);
+
+        Self { beacons, vectors }
+    }
+    fn diff_invariant((a, b): (&Position, &Position)) -> Direction {
+        let mut d = a - b;
+        let s = d.as_mut_slice();
+        for p in s.iter_mut() {
+            *p = p.abs();
+        }
+        s.sort();
+        d
+    }
 }
-*/
 
 fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
-    type Position = Vector<i16, 4>;
-    type Direction = Vector<i16, 4>;
-    type Transform = Matrix<i16, 4, 4>;
+    0
+    /*
+    let scanners: Vec<Scanner> = groups.iter().map(|g| Scanner::parse(&g[1..])).collect();
+    while scanners.len() > 1 {
+        // TODO: Just iteratively pull a scanner, find any matching pair, continue.
+    }
+    let edges_unique = pairs(scanners.iter())
+        .filter_map(|(a, b)| {
+            let nn = a.vectors.intersection(&b.vectors).count();
+            let n = (1..).find(|i| (i * (i - 1)) / 2 == nn).unwrap();
+            // a has 100 points, 4950 edges
+            // b has 50 points, 1225 edges
+            // total would have 150 points, 11765 edges, but if 10 points are shared, then it would be 140 points with 9730 edges (1145 fewer)
+            // TODO: Just reduce the scanners by merging; each step can detect all overlapping edges; do math.
+
+            if n >= 12 {
+                Some((a, b, n))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(overlaps.len() + 1, scanners.len());
+    /*
+      A 10   7   10 B
+      B 10   8   10 C
+    */
+    let total = scanners
+        .iter()
+        .map(|scanner| scanner.beacons.len())
+        .sum::<usize>();
+    let doubled = overlaps.iter().map(|(_, _, n)| n).sum::<usize>();
+    dbg!(total, doubled);
+    total - doubled
+    /*
     fn find_pivot(a: &HashSet<Position>, b: &[Position]) -> Option<Position> {
         for x in a {
             for y in b {
@@ -1121,16 +1162,6 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
         .filter(|t| determinate3(t) > 0)
         .collect();
     assert_eq!(possible_transforms.len(), 24);
-    let mut scanners: Vec<Vec<Position>> = groups
-        .iter()
-        .map(|g| {
-            g[1..]
-                .iter()
-                .map(|line| scan_fmt!(line, "{},{},{}", i16, i16, i16).ok().unwrap())
-                .map(|(a, b, c)| Position::from([a, b, c, 1]))
-                .collect()
-        })
-        .collect();
     let mut beacons: HashSet<_> = scanners.pop().unwrap().into_iter().collect();
     let mut transforms = vec![];
     'outer: while !scanners.is_empty() {
@@ -1143,15 +1174,6 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
             }
         }
         panic!("Not all overlapping!");
-    }
-    fn diff_invariant((a, b): (&Position, &Position)) -> Direction {
-        let mut d = a - b;
-        let s = d.as_mut_slice();
-        for p in s.iter_mut() {
-            *p = p.abs();
-        }
-        s.sort();
-        d
     }
     let edges: HashSet<_> = pairs(beacons.iter()).map(diff_invariant).collect();
     assert_eq!(edges.len(), pairs(beacons.iter()).count());
@@ -1171,14 +1193,117 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     } else {
         beacons.len()
     }
+    */
+    */
 }
 
-fn day20(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
+fn day20(lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
     0
 }
 
-fn day21(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day21(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let positions: Vec<_> = lines
+        .iter()
+        .map(|line| {
+            scan_fmt!(line, "Player {*d} starting position: {}", usize)
+                .ok()
+                .unwrap()
+        })
+        .collect();
+    if !gold {
+        let mut positions = positions;
+        let mut rolls = 0;
+        let mut scores = vec![0; positions.len()];
+        let mut roll = || {
+            rolls += 1;
+            (rolls - 1) % 100 + 1
+        };
+        loop {
+            for player in [0, 1] {
+                let p = &mut positions[player];
+                let distance: usize = (0..3).map(|_| roll()).sum();
+                *p += distance;
+                *p = (*p - 1) % 10 + 1;
+                let s = &mut scores[player];
+                *s += *p;
+                if *s >= 1000 {
+                    return scores[1 - player] * rolls;
+                }
+            }
+        }
+    } else {
+        let mut die_paths = [0; 7];
+        for a in 0..3 {
+            for b in 0..3 {
+                for c in 0..3 {
+                    die_paths[a + b + c] += 1;
+                }
+            }
+        }
+
+        #[derive(PartialEq, Eq, Hash, Default, Clone, Debug)]
+        struct WorldState {
+            turn: u8,
+            positions: [u8; 2],
+            scores: [u8; 2],
+            won: bool,
+        }
+        let mut state_counts = HashMap::from([(
+            WorldState {
+                turn: 0,
+                positions: [positions[0] as u8, positions[1] as u8],
+                scores: [0, 0],
+                won: false,
+            },
+            1,
+        )]);
+        loop {
+            let mut new_state_counts = HashMap::new();
+            let mut changed = false;
+            for (state, count) in state_counts {
+                if state.won {
+                    new_state_counts.insert(state, count);
+                    continue;
+                }
+                changed = true;
+                for die_sum in 3..=9 {
+                    let roll_paths = die_paths[die_sum - 3];
+                    let mut new_state = state.clone();
+                    let player = state.turn as usize;
+                    let position = &mut new_state.positions[player];
+                    let score = &mut new_state.scores[player];
+                    *position = (*position + die_sum as u8 - 1) % 10 + 1;
+                    *score += *position;
+                    if *score >= 21 {
+                        new_state.won = true;
+                    } else {
+                        new_state.turn = 1 - state.turn;
+                    }
+
+                    *new_state_counts.entry(new_state).or_insert(0) += count * roll_paths;
+                }
+            }
+            state_counts = new_state_counts;
+            if !changed {
+                break;
+            }
+            /*
+            actual;
+                208892670831810,
+                168544353172778,
+            expected:
+                444356092776315
+                341960390180808
+            */
+        }
+        let mut universe_wins = [0; 2];
+        dbg!(state_counts.len());
+        for (state, count) in state_counts {
+            universe_wins[state.turn as usize] += count;
+        }
+        dbg!(&universe_wins);
+        universe_wins.into_iter().max().unwrap()
+    }
 }
 
 fn day22(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
