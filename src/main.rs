@@ -7,6 +7,7 @@ extern crate vectrix;
 use clap::Parser;
 use std::cmp::{max, min, Ordering};
 use std::hash::Hash;
+use std::ops::RangeInclusive;
 use std::str::FromStr;
 use std::time::Instant;
 use vectrix::RowVector;
@@ -985,15 +986,16 @@ impl Snail {
     }
 }
 
+fn self_cross<T: Copy, I: Iterator<Item = T> + Clone>(items: I) -> impl Iterator<Item = (T, T)> {
+    items
+        .clone()
+        .flat_map(move |a| items.clone().map(move |b| (a, b)))
+}
+
 fn pairs<'a, T: 'a, I: Iterator<Item = &'a T> + 'a + Clone>(
     items: I,
 ) -> impl Iterator<Item = (&'a T, &'a T)> {
-    items.clone().flat_map(move |a| {
-        items
-            .clone()
-            .filter(|b| (*b as *const T) < (a as *const T))
-            .map(move |b| (a, b))
-    })
+    self_cross(items).filter(|(a, b)| (*a as *const T) < (*b as *const T))
 }
 
 fn day18(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
@@ -1196,9 +1198,50 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     */
     */
 }
+fn covering_range<T: Ord + From<bool> + Copy, I: Iterator<Item = T>>(iter: I) -> RangeInclusive<T> {
+    if let Some((min, max)) = iter.fold(None, |min_max, i| match min_max {
+        None => Some((i, i)),
+        Some((min, max)) if i < min => Some((i, max)),
+        Some((min, max)) if i > max => Some((min, i)),
+        _ => min_max,
+    }) {
+        min..=max
+    } else {
+        true.into()..=false.into()
+    }
+}
 
-fn day20(lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn day20(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+    let to_lit = |line: &str| line.chars().map(|ch| ch == '#').collect::<Vec<bool>>();
+    let pattern: Vec<bool> = to_lit(groups[0][0]);
+    let image: Vec<_> = groups[1].iter().cloned().map(to_lit).collect();
+    let edge = max(image[0].len(), image.len()) as i64;
+    let mut diff_lit: HashSet<_> = image
+        .into_iter()
+        .enumerate()
+        .flat_map(|(y, row)| {
+            row.into_iter()
+                .enumerate()
+                .filter(|(x, lit)| *lit)
+                .map(move |(x, _)| (x as i64, y as i64))
+        })
+        .collect();
+    let mut rest = false;
+    for step in 1..=(if gold { 50 } else { 2 }) {
+        let new_rest = pattern[if rest { 511 } else { 0 }];
+        diff_lit = self_cross((0 - step)..(edge + step))
+            .filter(|(x, y)| {
+                let index = self_cross(-1..=1)
+                    .map(|(dy, dx)| (x + dx, y + dy))
+                    .map(|(nx, ny)| diff_lit.contains(&(nx, ny)) ^ rest)
+                    .fold(0, |n, lit| n * 2 + lit as usize);
+                let lit = pattern[index] ^ new_rest;
+                lit
+            })
+            .collect();
+        rest = new_rest;
+    }
+    diff_lit.len()
 }
 
 fn day21(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
