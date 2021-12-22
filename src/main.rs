@@ -1015,9 +1015,11 @@ type Position = Vector<i16, 4>;
 type RelativePosition = Vector<i16, 4>;
 type Direction = Vector<i16, 4>;
 type Transform = Matrix<i16, 4, 4>;
+#[derive(Clone)]
 struct Scanner {
     beacons: Vec<Position>,
-    vectors: HashSet<Direction>,
+    edges: HashMap<Direction, (Position, Position)>,
+    n: usize,
 }
 
 impl Scanner {
@@ -1027,14 +1029,31 @@ impl Scanner {
             .map(|line| scan_fmt!(line, "{},{},{}", i16, i16, i16).ok().unwrap())
             .map(|(a, b, c)| Position::from([a, b, c, 1]))
             .collect();
-        let vectors: HashSet<_> = pairs(beacons.iter()).map(Self::diff_invariant).collect();
-        // Non-unique vectors possible, but unsupported.
-        assert_eq!(vectors.len(), beacons.len() * (beacons.len() - 1) / 2);
-        dbg!(&vectors);
+        let edges: HashMap<_, _> = pairs(beacons.iter())
+            .map(|(a, b)| (Self::diff_invariant(a, b), (a.clone(), b.clone())))
+            .collect();
+        // Non-unique edges possible, but unsupported.
+        assert_eq!(edges.len(), beacons.len() * (beacons.len() - 1) / 2);
+        //dbg!(&edges);
 
-        Self { beacons, vectors }
+        let n = beacons.len();
+        Self { beacons, edges, n }
     }
-    fn diff_invariant((a, b): (&Position, &Position)) -> Direction {
+
+    fn merge(&mut self, source: &Scanner, transform: &Transform) {
+        self.beacons
+            .extend(source.beacons.iter().map(|beacon| transform * beacon));
+        self.edges.extend(
+            source
+                .edges
+                .iter()
+                .map(|(dir, (p0, p1))| (*dir, (transform * p0, transform * p1))),
+        );
+        self.beacons.sort();
+        self.beacons.dedup();
+    }
+
+    fn diff_invariant(a: &Position, b: &Position) -> Direction {
         let mut d = a - b;
         let s = d.as_mut_slice();
         for p in s.iter_mut() {
@@ -1043,81 +1062,56 @@ impl Scanner {
         s.sort();
         d
     }
+
+    fn try_align(&self, target: &Scanner, transforms: &[Transform]) -> Option<Transform> {
+        let corresponding_edges: Vec<_> = self
+            .edges
+            .iter()
+            .filter_map(|(k, v_self)| {
+                target
+                    .edges
+                    .get(k)
+                    .map(|v_target| (v_self.clone(), v_target.clone()))
+            })
+            .collect();
+        if corresponding_edges.len() < 12 * (12 - 1) / 2 {
+            return None;
+        }
+        transforms.iter().cloned().find_map(|transform| {
+            [false, true].into_iter().find_map(|flip0| {
+                let pivot = corresponding_edges[0];
+                let reference = pivot.0 .0;
+                let anchor = if flip0 { pivot.1 .1 } else { pivot.1 .0 };
+                let offset = anchor - transform * reference;
+                if corresponding_edges[1..]
+                    .iter()
+                    .cloned()
+                    .all(|((s0, s1), (t0, t1))| {
+                        let ts0 = transform * s0 + offset;
+                        let ts1 = transform * s1 + offset;
+                        (ts0 == t0 && ts1 == t1) || (ts0 == t1 && ts1 == t0)
+                    })
+                {
+                    let mut ret = transform;
+                    ret[(0, 3)] = offset[0];
+                    ret[(1, 3)] = offset[1];
+                    ret[(2, 3)] = offset[2];
+                    Some(ret)
+                } else {
+                    None
+                }
+            })
+        })
+    }
 }
 
 fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
-    0
-    /*
-    let scanners: Vec<Scanner> = groups.iter().map(|g| Scanner::parse(&g[1..])).collect();
-    while scanners.len() > 1 {
-        // TODO: Just iteratively pull a scanner, find any matching pair, continue.
-    }
-    let edges_unique = pairs(scanners.iter())
-        .filter_map(|(a, b)| {
-            let nn = a.vectors.intersection(&b.vectors).count();
-            let n = (1..).find(|i| (i * (i - 1)) / 2 == nn).unwrap();
-            // a has 100 points, 4950 edges
-            // b has 50 points, 1225 edges
-            // total would have 150 points, 11765 edges, but if 10 points are shared, then it would be 140 points with 9730 edges (1145 fewer)
-            // TODO: Just reduce the scanners by merging; each step can detect all overlapping edges; do math.
-
-            if n >= 12 {
-                Some((a, b, n))
-            } else {
-                None
-            }
-        })
-        .collect();
-    assert_eq!(overlaps.len() + 1, scanners.len());
-    /*
-      A 10   7   10 B
-      B 10   8   10 C
-    */
-    let total = scanners
+    let mut scanners: Vec<Scanner> = groups
         .iter()
-        .map(|scanner| scanner.beacons.len())
-        .sum::<usize>();
-    let doubled = overlaps.iter().map(|(_, _, n)| n).sum::<usize>();
-    dbg!(total, doubled);
-    total - doubled
-    /*
-    fn find_pivot(a: &HashSet<Position>, b: &[Position]) -> Option<Position> {
-        for x in a {
-            for y in b {
-                let delta = x - y;
-                if b.iter()
-                    .map(|z| *z + delta)
-                    .filter(|p| a.contains(p))
-                    .count()
-                    >= 12
-                {
-                    return Some(delta);
-                }
-            }
-        }
-
-        None
-    }
-    fn transform_all(samples: &Vec<Position>, transform: &Transform) -> Vec<Position> {
-        samples.iter().map(|v| transform * v).collect()
-    }
-    fn try_align(
-        a: &HashSet<Position>,
-        b: &Vec<Position>,
-        transforms: &[Transform],
-    ) -> Option<Transform> {
-        for transform in transforms {
-            if let Some(offset) = find_pivot(a, &transform_all(b, transform)) {
-                let mut ret = *transform;
-                ret[(0, 3)] = offset[0];
-                ret[(1, 3)] = offset[1];
-                ret[(2, 3)] = offset[2];
-                return Some(ret);
-            }
-        }
-
-        None
-    }
+        .rev()
+        .map(|g| Scanner::parse(&g[1..]))
+        .collect();
+    let mut merged = scanners.pop().unwrap();
     let rotations = [
         //
         matrix![1,0,0, 0; 0,1,0, 0; 0,0,1,0; 0,0,0,1],
@@ -1163,22 +1157,18 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
         })
         .filter(|t| determinate3(t) > 0)
         .collect();
-    assert_eq!(possible_transforms.len(), 24);
-    let mut beacons: HashSet<_> = scanners.pop().unwrap().into_iter().collect();
     let mut transforms = vec![];
     'outer: while !scanners.is_empty() {
-        for i in 0..scanners.len() {
-            if let Some(transform) = try_align(&beacons, &scanners[i], &possible_transforms) {
-                let found = transform_all(&scanners.remove(i), &transform);
+        for i in (0..scanners.len()).rev() {
+            if let Some(transform) = scanners[i].try_align(&merged, &possible_transforms) {
+                merged.merge(&scanners[i], &transform);
                 transforms.push(transform);
-                beacons.extend(found.into_iter());
+                scanners.remove(i);
                 continue 'outer;
             }
         }
         panic!("Not all overlapping!");
     }
-    let edges: HashSet<_> = pairs(beacons.iter()).map(diff_invariant).collect();
-    assert_eq!(edges.len(), pairs(beacons.iter()).count());
 
     if gold {
         pairs(transforms.iter())
@@ -1193,21 +1183,7 @@ fn day19(_lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
             .max()
             .unwrap()
     } else {
-        beacons.len()
-    }
-    */
-    */
-}
-fn covering_range<T: Ord + From<bool> + Copy, I: Iterator<Item = T>>(iter: I) -> RangeInclusive<T> {
-    if let Some((min, max)) = iter.fold(None, |min_max, i| match min_max {
-        None => Some((i, i)),
-        Some((min, max)) if i < min => Some((i, max)),
-        Some((min, max)) if i > max => Some((min, i)),
-        _ => min_max,
-    }) {
-        min..=max
-    } else {
-        true.into()..=false.into()
+        merged.beacons.len()
     }
 }
 
@@ -1350,7 +1326,7 @@ fn main() {
 
     let wide = 20;
     println!(
-        "{1:>2}: {2:>0$} {3:>0$} {4:>0$} {5:>0$}",
+        "{1:>2}: {2:>0$} {3:>0$}\n    {4:>0$} {5:>0$}",
         wide + 13,
         "#",
         "test_silver",
@@ -1363,8 +1339,12 @@ fn main() {
         if !opts.problems.is_empty() && !opts.problems.contains(&n) {
             continue;
         }
-        print!("{:2}:", n);
         for test in [true, false] {
+            if test {
+                print!("{:2}:", n);
+            } else {
+                print!("\n   ");
+            }
             if let Some(content) = content(&format!(
                 "input/day{}{}.txt",
                 n,
