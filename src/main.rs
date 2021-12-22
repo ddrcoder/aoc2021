@@ -1012,7 +1012,6 @@ fn day18(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
 }
 
 type Position = Vector<i16, 4>;
-type RelativePosition = Vector<i16, 4>;
 type Direction = Vector<i16, 4>;
 type Transform = Matrix<i16, 4, 4>;
 #[derive(Clone)]
@@ -1289,8 +1288,95 @@ fn day21(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     universe_wins.into_iter().max().unwrap()
 }
 
-fn day22(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+fn vat<T: Copy>(v: &mut Vec<T>, i: usize, default: T) -> &mut T {
+    if v.len() <= i {
+        v.resize(i + 1, default);
+    }
+    &mut v[i]
+}
+
+fn day22(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    let commands: Vec<_> = lines
+        .iter()
+        .flat_map(|line| {
+            scan_fmt!(
+                line,
+                "{/on|off/} x={}..{},y={}..{},z={}..{}",
+                String,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64
+            )
+            .ok()
+        })
+        .filter(|(_, xl, xh, yl, yh, zl, zh)| {
+            gold || (*xl >= -50 && *xh <= 50 && *yl >= -50 && *yh <= 50 && *zl >= -50 && *zh <= 50)
+        })
+        .map(|(dir, xl, xh, yl, yh, zl, zh)| (xl, xh + 1, yl, yh + 1, zl, zh + 1, dir == "on"))
+        .collect();
+    let to_slist = |mut v: Vec<i64>| {
+        v.sort();
+        v.dedup();
+        v
+    };
+    let xc: Vec<i64> = to_slist(
+        commands
+            .iter()
+            .flat_map(|(xl, xh, _, _, _, _, _)| [*xl, *xh].into_iter())
+            .collect(),
+    );
+    let yc: Vec<i64> = to_slist(
+        commands
+            .iter()
+            .flat_map(|(_, _, yl, yh, _, _, _)| [*yl, *yh].into_iter())
+            .collect(),
+    );
+    let zc: Vec<i64> = to_slist(
+        commands
+            .iter()
+            .flat_map(|(_, _, _, _, zl, zh, _)| [*zl, *zh].into_iter())
+            .collect(),
+    );
+    let cut_commands = commands.iter().map(|(xl, xh, yl, yh, zl, zh, v)| {
+        (
+            xc.binary_search(xl).ok().unwrap(),
+            xc.binary_search(xh).ok().unwrap(),
+            yc.binary_search(yl).ok().unwrap(),
+            yc.binary_search(yh).ok().unwrap(),
+            zc.binary_search(zl).ok().unwrap(),
+            zc.binary_search(zh).ok().unwrap(),
+            v,
+        )
+    });
+    // Hack: Hardcoded.
+    assert!(xc.len() < 1000 && yc.len() < 1000 && zc.len() < 1000);
+    let mut volume = vec![[[false; 1000]; 1000]; 1000];
+    for (xl, xh, yl, yh, zl, zh, v) in cut_commands {
+        for x in xl..xh {
+            for y in yl..yh {
+                volume[x][y][zl..zh].fill(*v);
+            }
+        }
+    }
+
+    let mut n = 0;
+    for x in 1..xc.len() {
+        let wx = xc[x] - xc[x - 1];
+        for y in 1..yc.len() {
+            let wy = yc[y] - yc[y - 1];
+            for z in 1..zc.len() {
+                let wz = zc[z] - zc[z - 1];
+                if volume[x - 1][y - 1][z - 1] {
+                    n += wx * wy * wz;
+                }
+            }
+        }
+    }
+
+    n as usize
 }
 
 fn day23(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
