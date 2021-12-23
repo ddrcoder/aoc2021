@@ -3,17 +3,17 @@ extern crate scan_fmt;
 extern crate clap;
 #[macro_use]
 extern crate vectrix;
+extern crate ndarray;
 
 use clap::Parser;
+use ndarray::{Array2, Array3};
 use std::cmp::{max, min, Ordering};
 use std::hash::Hash;
-use std::ops::RangeInclusive;
-use std::str::FromStr;
 use std::time::Instant;
-use vectrix::RowVector;
 //use std::hash::Hash;
 use std::{collections::VecDeque, fmt::Debug};
 
+use ndarray::Array;
 use regex::{Captures, Regex};
 use std::collections::{hash_map::HashMap, hash_set::HashSet};
 use std::fs::File;
@@ -734,36 +734,36 @@ fn process(bits: &[u8], i: &mut usize, limit: Option<usize>) -> Vec<usize> {
     while *i < bits.len() && (limit.is_none() || n < limit.unwrap()) {
         n += 1;
         let version = read(i, bits, 3);
-        eprintln!("Read version {}", version);
+        //eprintln!("Read version {}", version);
         ret.push(match read(i, bits, 3) {
             4 => {
                 let mut v = 0;
                 while read(i, bits, 1) == 1 {
                     v = (v << 4) + read(i, bits, 4);
-                    eprintln!("Reading literal {}", v);
+                    //eprintln!("Reading literal {}", v);
                 }
                 v = (v << 4) + read(i, bits, 4);
-                eprintln!("Read literal {}", v);
+                //eprintln!("Read literal {}", v);
                 //while *i & 3 != 0 { *i += 1; }
                 v
             }
             a => {
-                eprintln!("Read op {}", a);
-                eprintln!("{{");
+                //eprintln!("Read op {}", a);
+                //eprintln!("{{");
 
                 let inner = if read(i, bits, 1) == 0 {
                     let length = read(i, bits, 15);
-                    eprintln!("Bit length: {}", length);
+                    //eprintln!("Bit length: {}", length);
                     let end = *i + length;
                     let ret = process(&bits[0..end], i, None);
-                    assert_eq!(*i, end);
+                    //assert_eq!(*i, end);
                     ret
                 } else {
                     let n = read(i, bits, 11);
-                    eprintln!("Count: {}", n);
+                    //eprintln!("Count: {}", n);
                     process(bits, i, Some(n))
                 };
-                eprintln!("}}");
+                //eprintln!("}}");
                 let values = inner.iter().cloned();
                 let (op, r) = match a {
                     0 => ("sum", values.sum()),
@@ -798,7 +798,7 @@ fn process(bits: &[u8], i: &mut usize, limit: Option<usize>) -> Vec<usize> {
                         panic!("unexpected: {}", o)
                     }
                 };
-                eprintln!("{} of {:?} is {}", op, &inner, r);
+                //eprintln!("{} of {:?} is {}", op, &inner, r);
                 r
             }
         });
@@ -822,7 +822,7 @@ fn day16(lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
         .collect();
     let r = process(&bits, &mut 0, Some(1));
     assert_eq!(r.len(), 1);
-    eprintln!("----------");
+    //eprintln!("----------");
     r[0]
 }
 
@@ -1288,13 +1288,6 @@ fn day21(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     universe_wins.into_iter().max().unwrap()
 }
 
-fn vat<T: Copy>(v: &mut Vec<T>, i: usize, default: T) -> &mut T {
-    if v.len() <= i {
-        v.resize(i + 1, default);
-    }
-    &mut v[i]
-}
-
 fn day22(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     let commands: Vec<_> = lines
         .iter()
@@ -1312,65 +1305,57 @@ fn day22(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
             )
             .ok()
         })
-        .filter(|(_, xl, xh, yl, yh, zl, zh)| {
-            gold || (*xl >= -50 && *xh <= 50 && *yl >= -50 && *yh <= 50 && *zl >= -50 && *zh <= 50)
+        // To half-open for clean edge cases
+        .map(|(dir, xl, xh, yl, yh, zl, zh)| {
+            ([(xl, xh + 1), (yl, yh + 1), (zl, zh + 1)], dir == "on")
         })
-        .map(|(dir, xl, xh, yl, yh, zl, zh)| (xl, xh + 1, yl, yh + 1, zl, zh + 1, dir == "on"))
+        .filter(|(ranges, _)| {
+            ranges[..]
+                .iter()
+                .all(|(l, h)| gold || (*l >= -50 && *h <= 51))
+        })
         .collect();
-    let to_slist = |mut v: Vec<i64>| {
+
+    let mut cuts = [vec![], vec![], vec![]];
+    (0..3).for_each(|a| {
+        let v = &mut cuts[a];
+        *v = commands
+            .iter()
+            .flat_map(|(ranges, _)| [ranges[a].0, ranges[a].1].into_iter())
+            .collect();
         v.sort();
         v.dedup();
-        v
-    };
-    let xc: Vec<i64> = to_slist(
-        commands
-            .iter()
-            .flat_map(|(xl, xh, _, _, _, _, _)| [*xl, *xh].into_iter())
-            .collect(),
-    );
-    let yc: Vec<i64> = to_slist(
-        commands
-            .iter()
-            .flat_map(|(_, _, yl, yh, _, _, _)| [*yl, *yh].into_iter())
-            .collect(),
-    );
-    let zc: Vec<i64> = to_slist(
-        commands
-            .iter()
-            .flat_map(|(_, _, _, _, zl, zh, _)| [*zl, *zh].into_iter())
-            .collect(),
-    );
-    let cut_commands = commands.iter().map(|(xl, xh, yl, yh, zl, zh, v)| {
-        (
-            xc.binary_search(xl).ok().unwrap(),
-            xc.binary_search(xh).ok().unwrap(),
-            yc.binary_search(yl).ok().unwrap(),
-            yc.binary_search(yh).ok().unwrap(),
-            zc.binary_search(zl).ok().unwrap(),
-            zc.binary_search(zh).ok().unwrap(),
-            v,
-        )
     });
-    // Hack: Hardcoded.
-    assert!(xc.len() < 1000 && yc.len() < 1000 && zc.len() < 1000);
-    let mut volume = vec![[[false; 1000]; 1000]; 1000];
+    let to_cut = |a: usize, v: i64| cuts[a].binary_search(&v).ok().unwrap();
+    let cut_commands = commands
+        .into_iter()
+        .map(|([(xl, xh), (yl, yh), (zl, zh)], v)| {
+            (
+                to_cut(0, xl),
+                to_cut(0, xh),
+                to_cut(1, yl),
+                to_cut(1, yh),
+                to_cut(2, zl),
+                to_cut(2, zh),
+                v,
+            )
+        })
+        .collect::<Vec<_>>();
+    let [xc, yc, zc] = cuts;
+    let mut volume = Array3::from_elem((xc.len(), yc.len(), zc.len()), false);
     for (xl, xh, yl, yh, zl, zh, v) in cut_commands {
-        for x in xl..xh {
-            for y in yl..yh {
-                volume[x][y][zl..zh].fill(*v);
-            }
-        }
+        volume.slice_mut(s![xl..xh, yl..yh, zl..zh]).fill(v);
     }
 
     let mut n = 0;
-    for x in 1..xc.len() {
-        let wx = xc[x] - xc[x - 1];
-        for y in 1..yc.len() {
-            let wy = yc[y] - yc[y - 1];
-            for z in 1..zc.len() {
-                let wz = zc[z] - zc[z - 1];
-                if volume[x - 1][y - 1][z - 1] {
-                    n += wx * wy * wz;
+    for x in 0..(xc.len() - 1) {
+        let dx = xc[x + 1] - xc[x];
+        for y in 0..(yc.len() - 1) {
+            let dy = yc[y] - yc[y];
+            for z in 0..(zc.len() - 1) {
+                let dz = zc[z + 1] - zc[z];
+                if volume[(x, y, z)] {
+                    n += dx * dy * dz;
                 }
             }
         }
