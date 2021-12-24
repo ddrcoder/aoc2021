@@ -1550,9 +1550,6 @@ fn day23(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
 }
 
 fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
-    if gold {
-        return 0;
-    }
     #[derive(Debug)]
     enum Var {
         W,
@@ -1619,374 +1616,86 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
             }
         })
         .collect();
-    dbg!(&program);
-    #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
-    enum Expression {
-        Input(usize),
-        Literal(i64),
-        Add(Box<(Expression, Expression)>),
-        Mul(Box<(Expression, Expression)>),
-        Div(Box<(Expression, Expression)>),
-        Mod(Box<(Expression, Expression)>),
-        Eql(Box<(Expression, Expression)>),
-        Ne(Box<(Expression, Expression)>),
-    };
-    fn print2(op: &str, p: &Box<(Expression, Expression)>, depth: usize) {
-        if depth == 0 {
-            eprint!("...");
-            return;
-        }
-        eprint!("(");
-        print(&(*p).0, depth - 1);
-        eprint!("{}", op);
-        print(&(*p).1, depth - 1);
-        eprint!(")");
-    }
-
-    fn print(e: &Expression, depth: usize) {
-        /*
-        ((1+(25*(0=([13]=(-2+(((...*...)+(...*...))%26))))))*((((1+(25*(0=([12]=(-16+...)))))*((((1+(25*...))*((...*...)+(...*...)))+((10+[11])*(0=([11]=...))))/26))+((8+[12])*(0=([12]=(-16+((...+...)%26))))))/26))
-        */
-        match e {
-            Expression::Literal(v) => eprint!("{}", v),
-            Expression::Input(n) => eprint!("i[{}]", n),
-            Expression::Add(p) => print2("+", p, depth),
-            Expression::Mul(p) => print2("*", p, depth),
-            Expression::Div(p) => print2("/", p, depth),
-            Expression::Mod(p) => print2("%", p, depth),
-            Expression::Eql(p) => print2("==", p, depth),
-            Expression::Ne(p) => print2("!=", p, depth),
-            _ => eprint!("??"),
-        }
-    }
-    let mut vars = [
-        Expression::Literal(0),
-        Expression::Literal(0),
-        Expression::Literal(0),
-        Expression::Literal(0),
-    ];
-    let mut inputs = 0;
-    let mut last_inputs = 0;
-    for code in program {
-        let pv = |var: &Var| match var {
-            Var::W => 0,
-            Var::X => 1,
-            Var::Y => 2,
-            Var::Z => 3,
-        };
-        match code {
-            Code::Input(var) => {
-                vars[pv(&var)] = {
-                    inputs += 1;
-                    Expression::Input(inputs - 1)
-                };
-            }
-            Code::Add(var, arg) => {
-                vars[pv(&var)] = Expression::Add(Box::new((
-                    vars[pv(&var)].clone(),
-                    match arg {
-                        Arg::Lit(v) => Expression::Literal(v),
-                        Arg::Var(var) => vars[pv(&var)].clone(),
-                    },
-                )));
-            }
-            Code::Mul(var, arg) => {
-                vars[pv(&var)] = Expression::Mul(Box::new((
-                    vars[pv(&var)].clone(),
-                    match arg {
-                        Arg::Lit(v) => Expression::Literal(v),
-                        Arg::Var(var) => vars[pv(&var)].clone(),
-                    },
-                )));
-            }
-            Code::Div(var, arg) => {
-                vars[pv(&var)] = Expression::Div(Box::new((
-                    vars[pv(&var)].clone(),
-                    match arg {
-                        Arg::Lit(v) => Expression::Literal(v),
-                        Arg::Var(var) => vars[pv(&var)].clone(),
-                    },
-                )));
-            }
-            Code::Mod(var, arg) => {
-                vars[pv(&var)] = Expression::Mod(Box::new((
-                    vars[pv(&var)].clone(),
-                    match arg {
-                        Arg::Lit(v) => Expression::Literal(v),
-                        Arg::Var(var) => vars[pv(&var)].clone(),
-                    },
-                )));
-            }
-            Code::Eql(var, arg) => {
-                vars[pv(&var)] = Expression::Eql(Box::new((
-                    vars[pv(&var)].clone(),
-                    match arg {
-                        Arg::Lit(v) => Expression::Literal(v),
-                        Arg::Var(var) => vars[pv(&var)].clone(),
-                    },
-                )));
-            }
-        };
-        fn ge(e: &Expression, min: i64) -> bool {
-            match e {
-                Expression::Input(_) => min <= 1,
-                Expression::Literal(v) => *v >= min,
-                Expression::Add(p) => match p.as_ref() {
-                    (Expression::Input(_), b) => ge(b, min - 1),
-                    (Expression::Literal(v), b) => ge(b, min - v),
-                    _ => false,
-                },
-                Expression::Mod(p) => match p.as_ref() {
-                    (a, Expression::Literal(d)) => min <= 0 && ge(a, 0),
-                    (a, Expression::Literal(_)) => false,
-                    _ => panic!(),
-                },
-                _ => false,
-            }
-        }
-        fn le(e: &Expression, max: i64) -> bool {
-            match e {
-                Expression::Input(_) => max >= 10,
-                Expression::Literal(v) => *v <= max,
-                Expression::Add(p) => match p.as_ref() {
-                    (o, Expression::Literal(n)) => le(o, max - *n),
-                    (Expression::Literal(n), o) => le(o, max - *n),
-                    _ => false,
-                },
-                _ => false,
-            }
-        }
-        fn simplify(e: &mut Expression) -> bool {
-            match e {
-                Expression::Input(_) => false,
-                Expression::Literal(_) => false,
-                Expression::Add(p) => match p.as_mut() {
-                    (a, b) if *a > *b => {
-                        *p.as_mut() = (b.clone(), a.clone());
-                        true
+    let mut inputs = [if gold { 1 } else { 9 }; 14];
+    let eval = |inputs: &[i64]| {
+        let mut vars = [0, 0, 0, 0];
+        let mut input = 0;
+        for (ip, code) in program.iter().enumerate() {
+            //eprintln!("{:?}", &code);
+            let pv = |var: &Var| match var {
+                Var::W => 0,
+                Var::X => 1,
+                Var::Y => 2,
+                Var::Z => 3,
+            };
+            match code {
+                Code::Input(var) => {
+                    if input >= inputs.len() {
+                        break;
                     }
-                    (Expression::Literal(a), Expression::Literal(b)) => {
-                        *e = Expression::Literal(*a + *b);
-                        eprintln!("const+");
-                        true
-                    }
-                    (Expression::Literal(0), o) => {
-                        *e = o.clone();
-                        eprintln!("0+");
-                        true
-                    }
-                    (o, Expression::Literal(0)) => {
-                        *e = o.clone();
-                        eprintln!("+0");
-                        true
-                    }
-                    (Expression::Literal(a), Expression::Add(p))
-                        if match p.as_ref() {
-                            (Expression::Literal(_), _) => true,
-                            (x, Expression::Literal(_)) => true,
-                            _ => false,
-                        } =>
-                    {
-                        let (s, x) = match p.as_ref() {
-                            (Expression::Literal(b), x) => (*a + *b, x.clone()),
-                            (x, Expression::Literal(b)) => (*a + *b, x.clone()),
-                            _ => unreachable!(),
+                    vars[pv(&var)] = inputs[input];
+                    input += 1;
+                }
+                Code::Add(var, arg) => {
+                    vars[pv(&var)] = vars[pv(&var)]
+                        + match arg {
+                            Arg::Lit(v) => *v,
+                            Arg::Var(var) => vars[pv(&var)],
                         };
-                        *e = Expression::Add(Box::new((Expression::Literal(s), x)));
-                        eprintln!("a+b+x");
-                        true
-                    }
-
-                    (a, b) => simplify(a) || simplify(b),
-                },
-                Expression::Mul(p) => match p.as_mut() {
-                    (a, b) if *a > *b => {
-                        *p.as_mut() = (b.clone(), a.clone());
-                        eprintln!("flip*");
-                        true
-                    }
-                    (Expression::Literal(a), Expression::Literal(b)) => {
-                        *e = Expression::Literal(*a * *b);
-                        eprintln!("const*");
-                        true
-                    }
-                    (Expression::Literal(0), _) => {
-                        *e = Expression::Literal(0);
-                        eprintln!("*0");
-                        true
-                    }
-                    (Expression::Literal(1), o) => {
-                        *e = o.clone();
-                        eprintln!("*1");
-                        true
-                    }
-                    (a, b) => simplify(a) || simplify(b),
-                },
-                Expression::Div(p) => match p.as_mut() {
-                    (Expression::Literal(a), Expression::Literal(b)) => {
-                        *e = Expression::Literal(*a / *b);
-                        eprintln!("const/");
-                        true
-                    }
-                    (o, Expression::Literal(1)) => {
-                        *e = o.clone();
-                        eprintln!("/1");
-                        true
-                    }
-                    (Expression::Add(p), Expression::Literal(d))
-                        if match p.as_ref() {
-                            (_, Expression::Mul(p))
-                                if match p.as_ref() {
-                                    (Expression::Literal(m), _) if m == d => true,
-                                    _ => false,
-                                } =>
-                            {
-                                true
-                            }
-                            _ => false,
-                        } =>
-                    {
-                        *e = match p.as_ref() {
-                            (_, Expression::Mul(p)) => match p.as_ref() {
-                                (Expression::Literal(m), r) => r,
-                                _ => unreachable!(),
-                            },
-                            _ => unreachable!(),
-                        }
-                        .clone();
-                        eprintln!("(small+M*b)/M");
-                        true
-                    }
-                    (a, b) => simplify(a) || simplify(b),
-                },
-                Expression::Mod(p) => match p.as_mut() {
-                    (Expression::Literal(a), Expression::Literal(b)) => {
-                        *e = Expression::Literal(*a % *b);
-                        eprintln!("const%");
-                        true
-                    }
-                    (left, Expression::Literal(m)) if le(left, *m - 1) => {
-                        *e = left.clone();
-                        eprintln!("small%big");
-                        true
-                    }
-                    (Expression::Add(p), Expression::Literal(m))
-                        if match p.as_ref() {
-                            (_, Expression::Mul(p))
-                                if match p.as_ref() {
-                                    (Expression::Literal(s), _) if s == m => true,
-                                    _ => false,
-                                } =>
-                            {
-                                true
-                            }
-                            _ => false,
-                        } =>
-                    {
-                        //(a+b*c)%b
-                        //Expression::=> HHHHHHHHHHHHHKX) = e => {
-                        *e = Expression::Mod(Box::new((
-                            p.as_ref().0.clone(),
-                            Expression::Literal(*m),
-                        )));
-                        eprintln!("(a+M*b)%M");
-                        true
-                    }
-                    (Expression::Literal(0), _) => {
-                        *e = Expression::Literal(0);
-                        eprintln!("0%");
-                        true
-                    }
-                    (a, b) => simplify(a) || simplify(b),
-                },
-                Expression::Eql(p) => match p.as_mut() {
-                    (a, b) if *a > *b => {
-                        *p.as_mut() = (b.clone(), a.clone());
-                        eprintln!("flip=");
-                        true
-                    }
-                    (Expression::Literal(a), Expression::Literal(b)) => {
-                        *e = Expression::Literal(if *a == *b { 1 } else { 0 });
-                        eprintln!("const=");
-                        true
-                    }
-                    (Expression::Input(_), o) if le(o, 0) => {
-                        print(o, 0);
-                        eprintln!("\n^< 1");
-                        *e = Expression::Literal(0);
-                        true
-                    }
-                    (Expression::Input(_), o) if ge(o, 10) => {
-                        print(o, 0);
-                        eprintln!("\n^> 9");
-                        *e = Expression::Literal(0);
-                        true
-                    }
-                    (Expression::Literal(0), Expression::Eql(p)) => {
-                        *e = Expression::Ne(p.clone());
-                        eprintln!("!=%");
-                        true
-                    }
-                    (a, b) => simplify(a) || simplify(b),
-                },
-                Expression::Ne(p) => match p.as_mut() {
-                    (a, b) => simplify(a) || simplify(b),
-                },
+                }
+                Code::Mul(var, arg) => {
+                    vars[pv(&var)] = vars[pv(&var)]
+                        * match arg {
+                            Arg::Lit(v) => *v,
+                            Arg::Var(var) => vars[pv(&var)],
+                        };
+                }
+                Code::Div(var, arg) => {
+                    vars[pv(&var)] = vars[pv(&var)]
+                        / match arg {
+                            Arg::Lit(v) => *v,
+                            Arg::Var(var) => vars[pv(&var)],
+                        };
+                }
+                Code::Mod(var, arg) => {
+                    vars[pv(&var)] = vars[pv(&var)]
+                        % match arg {
+                            Arg::Lit(v) => *v,
+                            Arg::Var(var) => vars[pv(&var)],
+                        };
+                }
+                Code::Eql(var, arg) => {
+                    vars[pv(&var)] = (vars[pv(&var)]
+                        == match arg {
+                            Arg::Lit(v) => *v,
+                            Arg::Var(var) => vars[pv(&var)],
+                        }) as i64
+                }
+            };
+        }
+        vars[3]
+    };
+    let mut best_z = eval(&inputs);
+    for _pass in 0..3 {
+        for position in 0..inputs.len() {
+            let (v, z) = (1..=9)
+                .map(|v| {
+                    let save = inputs[position];
+                    inputs[position] = v;
+                    let z = eval(&inputs);
+                    inputs[position] = save;
+                    (v, z)
+                })
+                .min_by_key(|(v, z)| (*z, 10 - *v))
+                .unwrap();
+            if z * 10 < best_z || z == 0 {
+                inputs[position] = v;
+                best_z = z;
             }
-        }
-        let before = vars[3].clone();
-        for i in 0..4 {
-            let v = &mut vars[i];
-            let before = v.clone();
-            while simplify(v) {}
-            if before != *v && false {
-                eprint!("from ");
-                print(&before, 0);
-                eprint!("\n to ");
-                print(v, 0);
-                eprintln!();
-                eprintln!("\n-------------------------------");
-            }
-        }
-        if inputs > 7 && false {
-            break;
-        }
-        if inputs != last_inputs {
-            last_inputs = inputs;
-            eprint!("z = ");
-            print(&before, 20);
-            eprintln!("\n now {} inputs", inputs);
+            //eprintln!("input={:?} z={}\n    (want 99919692496939)", &inputs, z);
         }
     }
-    let z = &vars[3];
-    fn apply((a, b): &(Expression, Expression), vars: &[i64], op: &dyn Fn(i64, i64) -> i64) -> i64 {
-        let a = eval(a, vars);
-        let b = eval(b, vars);
-        op(a, b)
-    }
-    fn eval(e: &Expression, vars: &[i64]) -> i64 {
-        match e {
-            Expression::Literal(v) => *v,
-            Expression::Input(n) => vars[*n],
-            Expression::Add(p) => apply(p, vars, &|a, b| a + b),
-            Expression::Mul(p) => apply(p, vars, &|a, b| a * b),
-            Expression::Div(p) => apply(p, vars, &|a, b| a / b),
-            Expression::Mod(p) => apply(p, vars, &|a, b| a % b),
-            Expression::Eql(p) => apply(p, vars, &|a, b| (a == b) as i64),
-            Expression::Ne(p) => apply(p, vars, &|a, b| (a != b) as i64),
-        }
-    }
-    print(z, 10);
-    print(z, 20);
-    let mut inputs = [1; 14];
-    for position in 0..inputs.len() {
-        for v in 1..=9 {
-            inputs[position] = v;
-            dbg!(eval(z, &inputs));
-        }
-    }
-
-    0
+    inputs.iter().fold(0, |v, d| v * 10 + *d as usize)
 }
 
 fn day25(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
