@@ -3,6 +3,7 @@ extern crate scan_fmt;
 extern crate clap;
 #[macro_use]
 extern crate vectrix;
+#[macro_use]
 extern crate ndarray;
 
 use clap::Parser;
@@ -1364,11 +1365,623 @@ fn day22(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     n as usize
 }
 
-fn day23(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
-    0
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+struct Pod {
+    kind: u8, // 0 = A, 1 = B, 2 = C, 3 = D
+    pos: (usize, usize),
 }
 
-fn day24(_lines: &[&str], _groups: &[&[&str]], _gold: bool) -> usize {
+impl Pod {
+    fn step_cost(&self) -> u32 {
+        10u32.pow(self.kind as u32)
+    }
+
+    fn goal_pos(&self) -> (usize, usize) {
+        (2 + self.kind as usize * 2, 2)
+    }
+}
+#[derive(Debug)]
+struct Caves {
+    pods: Vec<Pod>,
+    grid: Array2<Option<usize>>,
+}
+
+impl Caves {
+    fn new(lines: &[&str]) -> Self {
+        let targets = lines
+            .iter()
+            .flat_map(|line| line.chars())
+            .filter(|ch| *ch >= 'A' && *ch <= 'D')
+            .map(|ch| ch as usize - 'A' as usize);
+        let locations = [
+            (2, 1),
+            (4, 1),
+            (6, 1),
+            (8, 1),
+            (2, 2),
+            (4, 2),
+            (6, 2),
+            (8, 2),
+        ];
+        let mut pods: Vec<_> = locations
+            .into_iter()
+            .zip(targets)
+            .map(|(p, t)| Pod {
+                pos: p,
+                kind: t as u8,
+            })
+            .collect();
+        pods.sort();
+        let mut grid = Array2::<Option<usize>>::from_elem((11, 3), None);
+        for (i, pod) in pods.iter().enumerate() {
+            grid[pod.pos] = Some(i);
+        }
+        Caves { pods, grid }
+    }
+
+    fn d1(a: usize, b: usize) -> usize {
+        if a < b {
+            b - a
+        } else {
+            a - b
+        }
+    }
+    fn d2((ax, ay): (usize, usize), (bx, by): (usize, usize)) -> usize {
+        Self::d1(ax, bx) + Self::d1(ay, by)
+    }
+    fn mv(&mut self, i: usize, t: (usize, usize)) -> u32 {
+        let pod = &mut self.pods[i];
+        let cost = Self::d2(pod.pos, t) as u32 * pod.step_cost();
+        let p = &mut pod.pos;
+        self.grid[*p] = None;
+        *p = t;
+        self.grid[*p] = Some(i);
+        cost
+    }
+
+    fn solve(&mut self) {
+        fn step_path<F: FnMut((usize, usize))>(
+            (mut x, mut y): (usize, usize),
+            (tx, ty): (usize, usize),
+            mut f: F,
+        ) {
+            while y != 0 {
+                y -= 1;
+                f((x, y));
+            }
+            if tx > x {
+                while x != tx {
+                    x += 1;
+                    f((x, y));
+                }
+            } else {
+                while x != ty {
+                    x -= 1;
+                    f((x, y));
+                }
+            }
+            while y != ty {
+                y += 1;
+                f((x, y));
+            }
+        }
+        fn try_mv(
+            caves: &mut Caves,
+            i: usize,
+            (tx, ty): (usize, usize),
+            undo: &mut Vec<(usize, (usize, usize))>,
+        ) -> u32 {
+            let pod = &caves.pods[i];
+            let step_cost = pod.step_cost();
+            let mut cost = 0;
+            let mut blockers = vec![];
+            let (sx, sy) = pod.pos;
+            undo.push((i, (sx, sy)));
+            step_path((sx, sy), (tx, ty), |p| {
+                cost += step_cost;
+                if let Some(j) = caves.grid[p] {
+                    blockers.push((i, 0));
+                }
+            });
+
+            let left = min(sx, tx) - 1;
+            let right = max(sx, tx) + 1;
+            for i in 0..blockers.len() {
+                let (bx, _by) = caves.pods[i].pos;
+                assert!(bx >= left);
+                assert!(bx <= right);
+                blockers[i].1 = if bx - left > right - bx { right } else { left }
+            }
+            for (i, tx) in blockers {
+                cost += try_mv(caves, i, (tx, 0), undo);
+            }
+            cost += caves.mv(i, (tx, ty));
+            cost
+        }
+        while let Some((i, cost)) = (0..self.pods.len())
+            .map(|i| {
+                let mut undo = vec![];
+                let cost = try_mv(self, i, self.pods[i].goal_pos(), &mut undo);
+                self.print();
+                //for (i, p) in undo {}
+                (i, cost)
+            })
+            .min_by_key(|(_, cost)| *cost)
+        {
+            self.print();
+            panic!();
+        }
+    }
+    fn ch(&self, value: Option<usize>) -> char {
+        match value {
+            None => '.',
+            Some(i) => ('A' as u8 + self.pods[i].kind as u8) as char,
+        }
+    }
+    fn print(&self) {
+        eprintln!("#############");
+        for y in 0..3 {
+            eprint!("#");
+            for x in 0..11 {
+                eprint!(
+                    "{}",
+                    if y > 0 && ![2, 4, 6, 8].contains(&x) {
+                        '#'
+                    } else {
+                        self.ch(self.grid[(x, 0)])
+                    }
+                );
+            }
+            eprintln!("#");
+        }
+        eprintln!("#############");
+    }
+}
+
+fn day23(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
+    if gold {
+        return 0;
+    }
+    let mut caves = Caves::new(lines);
+    caves.solve();
+
+    dbg!(&caves);
+    1
+}
+
+fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
+    if gold {
+        return 0;
+    }
+    #[derive(Debug)]
+    enum Var {
+        W,
+        X,
+        Y,
+        Z,
+    }
+    #[derive(Debug)]
+    enum Arg {
+        Var(Var),
+        Lit(i64),
+    }
+    #[derive(Debug)]
+    enum Code {
+        Input(Var),
+        Add(Var, Arg),
+        Mul(Var, Arg),
+        Div(Var, Arg),
+        Mod(Var, Arg),
+        Eql(Var, Arg),
+    }
+    let parse_var = |s: &str| match s {
+        "w" => Var::W,
+        "x" => Var::X,
+        "y" => Var::Y,
+        "z" => Var::Z,
+        v => panic!("{} isn't a var", v),
+    };
+    let parse_arg = |s: &str| {
+        if s.chars().last().unwrap().is_numeric() {
+            Arg::Lit(s.parse().ok().unwrap())
+        } else {
+            Arg::Var(parse_var(s))
+        }
+    };
+
+    let program: Vec<_> = lines
+        .iter()
+        .map(|line| {
+            let mut words = line.split(' ');
+            match words.next().unwrap() {
+                "inp" => Code::Input(parse_var(words.next().unwrap())),
+                "add" => Code::Add(
+                    parse_var(words.next().unwrap()),
+                    parse_arg(words.next().unwrap()),
+                ),
+                "mul" => Code::Mul(
+                    parse_var(words.next().unwrap()),
+                    parse_arg(words.next().unwrap()),
+                ),
+                "div" => Code::Div(
+                    parse_var(words.next().unwrap()),
+                    parse_arg(words.next().unwrap()),
+                ),
+                "mod" => Code::Mod(
+                    parse_var(words.next().unwrap()),
+                    parse_arg(words.next().unwrap()),
+                ),
+                "eql" => Code::Eql(
+                    parse_var(words.next().unwrap()),
+                    parse_arg(words.next().unwrap()),
+                ),
+                o => panic!("Unrecognized: {}", o),
+            }
+        })
+        .collect();
+    dbg!(&program);
+    #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
+    enum Expression {
+        Input(usize),
+        Literal(i64),
+        Add(Box<(Expression, Expression)>),
+        Mul(Box<(Expression, Expression)>),
+        Div(Box<(Expression, Expression)>),
+        Mod(Box<(Expression, Expression)>),
+        Eql(Box<(Expression, Expression)>),
+    };
+    fn print2(op: &str, p: &Box<(Expression, Expression)>, depth: usize) {
+        if depth == 0 {
+            eprint!("...");
+            return;
+        }
+        eprint!("(");
+        print(&(*p).0, depth - 1);
+        eprint!("{}", op);
+        print(&(*p).1, depth - 1);
+        eprint!(")");
+    }
+
+    fn print(e: &Expression, depth: usize) {
+        /*
+        ((1+(25*(0=([13]=(-2+(((...*...)+(...*...))%26))))))*((((1+(25*(0=([12]=(-16+...)))))*((((1+(25*...))*((...*...)+(...*...)))+((10+[11])*(0=([11]=...))))/26))+((8+[12])*(0=([12]=(-16+((...+...)%26))))))/26))
+        */
+        match e {
+            Expression::Literal(v) => eprint!("{}", v),
+            Expression::Input(n) => eprint!("i[{}]", n),
+            Expression::Add(p) => print2("+", p, depth),
+            Expression::Mul(p) => print2("*", p, depth),
+            Expression::Div(p) => print2("/", p, depth),
+            Expression::Mod(p) => print2("%", p, depth),
+            Expression::Eql(p) => print2("==", p, depth),
+            _ => eprint!("??"),
+        }
+    }
+    let mut vars = [
+        Expression::Literal(0),
+        Expression::Literal(0),
+        Expression::Literal(0),
+        Expression::Literal(0),
+    ];
+    let mut inputs = 0;
+    for code in program {
+        let pv = |var: &Var| match var {
+            Var::W => 0,
+            Var::X => 1,
+            Var::Y => 2,
+            Var::Z => 3,
+        };
+        match code {
+            Code::Input(var) => {
+                vars[pv(&var)] = {
+                    inputs += 1;
+                    Expression::Input(inputs - 1)
+                };
+            }
+            Code::Add(var, arg) => {
+                vars[pv(&var)] = Expression::Add(Box::new((
+                    vars[pv(&var)].clone(),
+                    match arg {
+                        Arg::Lit(v) => Expression::Literal(v),
+                        Arg::Var(var) => vars[pv(&var)].clone(),
+                    },
+                )));
+            }
+            Code::Mul(var, arg) => {
+                vars[pv(&var)] = Expression::Mul(Box::new((
+                    vars[pv(&var)].clone(),
+                    match arg {
+                        Arg::Lit(v) => Expression::Literal(v),
+                        Arg::Var(var) => vars[pv(&var)].clone(),
+                    },
+                )));
+            }
+            Code::Div(var, arg) => {
+                vars[pv(&var)] = Expression::Div(Box::new((
+                    vars[pv(&var)].clone(),
+                    match arg {
+                        Arg::Lit(v) => Expression::Literal(v),
+                        Arg::Var(var) => vars[pv(&var)].clone(),
+                    },
+                )));
+            }
+            Code::Mod(var, arg) => {
+                vars[pv(&var)] = Expression::Mod(Box::new((
+                    vars[pv(&var)].clone(),
+                    match arg {
+                        Arg::Lit(v) => Expression::Literal(v),
+                        Arg::Var(var) => vars[pv(&var)].clone(),
+                    },
+                )));
+            }
+            Code::Eql(var, arg) => {
+                vars[pv(&var)] = Expression::Eql(Box::new((
+                    vars[pv(&var)].clone(),
+                    match arg {
+                        Arg::Lit(v) => Expression::Literal(v),
+                        Arg::Var(var) => vars[pv(&var)].clone(),
+                    },
+                )));
+            }
+        };
+        fn ge(e: &Expression, min: i64) -> bool {
+            match e {
+                Expression::Input(_) => min <= 1,
+                Expression::Literal(v) => *v >= min,
+                Expression::Add(p) => match p.as_ref() {
+                    (Expression::Input(_), b) => ge(b, min - 1),
+                    (Expression::Literal(v), b) => ge(b, min - v),
+                    _ => false,
+                },
+                Expression::Mod(p) => match p.as_ref() {
+                    (a, Expression::Literal(d)) => min <= 0 && ge(a, 0),
+                    (a, Expression::Literal(_)) => false,
+                    _ => panic!(),
+                },
+                _ => false,
+            }
+        }
+        fn le(e: &Expression, max: i64) -> bool {
+            match e {
+                Expression::Input(_) => max >= 10,
+                Expression::Literal(v) => *v <= max,
+                Expression::Add(p) => match p.as_ref() {
+                    (o, Expression::Literal(n)) => le(o, max - *n),
+                    (Expression::Literal(n), o) => le(o, max - *n),
+                    _ => false,
+                },
+                _ => false,
+            }
+        }
+        fn simplify(e: &mut Expression) -> bool {
+            match e {
+                Expression::Input(_) => false,
+                Expression::Literal(_) => false,
+                Expression::Add(p) => match p.as_mut() {
+                    (a, b) if *a > *b => {
+                        *p.as_mut() = (b.clone(), a.clone());
+                        true
+                    }
+                    (Expression::Literal(a), Expression::Literal(b)) => {
+                        *e = Expression::Literal(*a + *b);
+                        eprintln!("const+");
+                        true
+                    }
+                    (Expression::Literal(0), o) => {
+                        *e = o.clone();
+                        eprintln!("0+");
+                        true
+                    }
+                    (o, Expression::Literal(0)) => {
+                        *e = o.clone();
+                        eprintln!("+0");
+                        true
+                    }
+                    (Expression::Literal(a), Expression::Add(p))
+                        if match p.as_ref() {
+                            (Expression::Literal(_), _) => true,
+                            (x, Expression::Literal(_)) => true,
+                            _ => false,
+                        } =>
+                    {
+                        let (s, x) = match p.as_ref() {
+                            (Expression::Literal(b), x) => (*a + *b, x.clone()),
+                            (x, Expression::Literal(b)) => (*a + *b, x.clone()),
+                            _ => unreachable!(),
+                        };
+                        *e = Expression::Add(Box::new((Expression::Literal(s), x)));
+                        eprintln!("a+b+x");
+                        true
+                    }
+
+                    (a, b) => simplify(a) | simplify(b),
+                },
+                Expression::Mul(p) => match p.as_mut() {
+                    (a, b) if *a > *b => {
+                        *p.as_mut() = (b.clone(), a.clone());
+                        eprintln!("flip*");
+                        true
+                    }
+                    (Expression::Literal(a), Expression::Literal(b)) => {
+                        *e = Expression::Literal(*a * *b);
+                        eprintln!("const*");
+                        true
+                    }
+                    (Expression::Literal(0), _) => {
+                        *e = Expression::Literal(0);
+                        eprintln!("*0");
+                        true
+                    }
+                    (Expression::Literal(1), o) => {
+                        *e = o.clone();
+                        eprintln!("*1");
+                        true
+                    }
+                    (a, b) => simplify(a) | simplify(b),
+                },
+                Expression::Div(p) => match p.as_mut() {
+                    (Expression::Literal(a), Expression::Literal(b)) => {
+                        *e = Expression::Literal(*a / *b);
+                        eprintln!("const/");
+                        true
+                    }
+                    (o, Expression::Literal(1)) => {
+                        *e = o.clone();
+                        eprintln!("/1");
+                        true
+                    }
+                    (Expression::Add(p), Expression::Literal(d))
+                        if match p.as_ref() {
+                            (_, Expression::Mul(p))
+                                if match p.as_ref() {
+                                    (Expression::Literal(m), _) if m == d => true,
+                                    _ => false,
+                                } =>
+                            {
+                                true
+                            }
+                            _ => false,
+                        } =>
+                    {
+                        *e = match p.as_ref() {
+                            (_, Expression::Mul(p)) => match p.as_ref() {
+                                (Expression::Literal(m), r) => r,
+                                _ => unreachable!(),
+                            },
+                            _ => unreachable!(),
+                        }
+                        .clone();
+                        eprintln!("(small+M*b)/M");
+                        true
+                    }
+                    (a, b) => simplify(a) | simplify(b),
+                },
+                Expression::Mod(p) => match p.as_mut() {
+                    (Expression::Literal(a), Expression::Literal(b)) => {
+                        *e = Expression::Literal(*a % *b);
+                        eprintln!("const%");
+                        true
+                    }
+                    (left, Expression::Literal(m)) if le(left, *m - 1) => {
+                        *e = left.clone();
+                        eprintln!("small%big");
+                        true
+                    }
+                    (Expression::Add(p), Expression::Literal(m))
+                        if match p.as_ref() {
+                            (_, Expression::Mul(p))
+                                if match p.as_ref() {
+                                    (Expression::Literal(s), _) if s == m => true,
+                                    _ => false,
+                                } =>
+                            {
+                                true
+                            }
+                            _ => false,
+                        } =>
+                    {
+                        //(a+b*c)%b
+                        //Expression::=> HHHHHHHHHHHHHKX) = e => {
+                        *e = Expression::Mod(Box::new((
+                            p.as_ref().0.clone(),
+                            Expression::Literal(*m),
+                        )));
+                        eprintln!("(a+M*b)%M");
+                        true
+                    }
+                    (Expression::Literal(0), _) => {
+                        *e = Expression::Literal(0);
+                        eprintln!("0%");
+                        true
+                    }
+                    (a, b) => simplify(a) || simplify(b),
+                },
+                Expression::Eql(p) => match p.as_mut() {
+                    (a, b) if *a > *b => {
+                        *p.as_mut() = (b.clone(), a.clone());
+                        eprintln!("flip=");
+                        true
+                    }
+                    (Expression::Literal(a), Expression::Literal(b)) => {
+                        *e = Expression::Literal(if *a == *b { 1 } else { 0 });
+                        eprintln!("const=");
+                        true
+                    }
+                    (Expression::Input(_), o) if le(o, 0) => {
+                        print(o, 0);
+                        eprintln!("\n^< 1");
+                        *e = Expression::Literal(0);
+                        true
+                    }
+                    (Expression::Input(_), o) if ge(o, 10) => {
+                        print(o, 0);
+                        eprintln!("\n^> 9");
+                        *e = Expression::Literal(0);
+                        true
+                    }
+                    (a, b) => simplify(a) | simplify(b),
+                },
+            }
+        }
+        let before = vars[3].clone();
+        for i in 0..4 {
+            let v = &mut vars[i];
+            let before = v.clone();
+            while simplify(v) {}
+            if before != *v && false {
+                eprint!("from ");
+                print(&before, 0);
+                eprint!("\n to ");
+                print(v, 0);
+                eprintln!();
+                eprintln!("\n-------------------------------");
+            }
+        }
+        if inputs > 7 && false {
+            break;
+        }
+        eprintln!("{} inputs", inputs);
+    }
+    let z = &vars[3];
+    fn apply((a, b): &(Expression, Expression), vars: &[i64], op: &dyn Fn(i64, i64) -> i64) -> i64 {
+        let a = eval(a, vars);
+        let b = eval(b, vars);
+        op(a, b)
+    }
+    fn eval(e: &Expression, vars: &[i64]) -> i64 {
+        match e {
+            Expression::Literal(v) => *v,
+            Expression::Input(n) => vars[*n],
+            Expression::Add(p) => apply(p, vars, &|a, b| a + b),
+            Expression::Mul(p) => apply(p, vars, &|a, b| a * b),
+            Expression::Div(p) => apply(p, vars, &|a, b| a / b),
+            Expression::Mod(p) => apply(p, vars, &|a, b| a % b),
+            Expression::Eql(p) => apply(p, vars, &|a, b| (a == b) as i64),
+        }
+    }
+    print(z, 10);
+    print(z, 90);
+    let mut inputs = [1; 14];
+    for position in 0..inputs.len() {
+        for v in 1..=9 {
+            inputs[position] = v;
+            dbg!(eval(z, &inputs));
+        }
+    }
+
+    {
+        let x = ((1
+            + (25
+                * (0 == (i[4]
+                    == (11
+                        + ((((i[3] + 4) * (0 == (i[3] == (i[2] + -8))))
+                            + ((1 + (25 * (0 == (i[3] == (i[2] + -8)))))
+                                * ((i[1] + 9) + (26 * (i[0] + 5)))))
+                            % 26))))))
+            * (((i[3] + 4) * (0 == (i[3] == (i[2] + -8))))
+                + ((1 + (25 * (0 == (i[3] == (i[2] + -8))))) * ((i[1] + 9) + (26 * (i[0] + 5))))));
+    }
+
     0
 }
 
