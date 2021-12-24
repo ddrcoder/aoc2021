@@ -1629,6 +1629,7 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
         Div(Box<(Expression, Expression)>),
         Mod(Box<(Expression, Expression)>),
         Eql(Box<(Expression, Expression)>),
+        Ne(Box<(Expression, Expression)>),
     };
     fn print2(op: &str, p: &Box<(Expression, Expression)>, depth: usize) {
         if depth == 0 {
@@ -1654,6 +1655,7 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
             Expression::Div(p) => print2("/", p, depth),
             Expression::Mod(p) => print2("%", p, depth),
             Expression::Eql(p) => print2("==", p, depth),
+            Expression::Ne(p) => print2("!=", p, depth),
             _ => eprint!("??"),
         }
     }
@@ -1664,6 +1666,7 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
         Expression::Literal(0),
     ];
     let mut inputs = 0;
+    let mut last_inputs = 0;
     for code in program {
         let pv = |var: &Var| match var {
             Var::W => 0,
@@ -1794,7 +1797,7 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
                         true
                     }
 
-                    (a, b) => simplify(a) | simplify(b),
+                    (a, b) => simplify(a) || simplify(b),
                 },
                 Expression::Mul(p) => match p.as_mut() {
                     (a, b) if *a > *b => {
@@ -1817,7 +1820,7 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
                         eprintln!("*1");
                         true
                     }
-                    (a, b) => simplify(a) | simplify(b),
+                    (a, b) => simplify(a) || simplify(b),
                 },
                 Expression::Div(p) => match p.as_mut() {
                     (Expression::Literal(a), Expression::Literal(b)) => {
@@ -1854,7 +1857,7 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
                         eprintln!("(small+M*b)/M");
                         true
                     }
-                    (a, b) => simplify(a) | simplify(b),
+                    (a, b) => simplify(a) || simplify(b),
                 },
                 Expression::Mod(p) => match p.as_mut() {
                     (Expression::Literal(a), Expression::Literal(b)) => {
@@ -1919,7 +1922,15 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
                         *e = Expression::Literal(0);
                         true
                     }
-                    (a, b) => simplify(a) | simplify(b),
+                    (Expression::Literal(0), Expression::Eql(p)) => {
+                        *e = Expression::Ne(p.clone());
+                        eprintln!("!=%");
+                        true
+                    }
+                    (a, b) => simplify(a) || simplify(b),
+                },
+                Expression::Ne(p) => match p.as_mut() {
+                    (a, b) => simplify(a) || simplify(b),
                 },
             }
         }
@@ -1940,7 +1951,12 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
         if inputs > 7 && false {
             break;
         }
-        eprintln!("{} inputs", inputs);
+        if inputs != last_inputs {
+            last_inputs = inputs;
+            eprint!("z = ");
+            print(&before, 20);
+            eprintln!("\n now {} inputs", inputs);
+        }
     }
     let z = &vars[3];
     fn apply((a, b): &(Expression, Expression), vars: &[i64], op: &dyn Fn(i64, i64) -> i64) -> i64 {
@@ -1957,29 +1973,17 @@ fn day24(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
             Expression::Div(p) => apply(p, vars, &|a, b| a / b),
             Expression::Mod(p) => apply(p, vars, &|a, b| a % b),
             Expression::Eql(p) => apply(p, vars, &|a, b| (a == b) as i64),
+            Expression::Ne(p) => apply(p, vars, &|a, b| (a != b) as i64),
         }
     }
     print(z, 10);
-    print(z, 90);
+    print(z, 20);
     let mut inputs = [1; 14];
     for position in 0..inputs.len() {
         for v in 1..=9 {
             inputs[position] = v;
             dbg!(eval(z, &inputs));
         }
-    }
-
-    {
-        let x = ((1
-            + (25
-                * (0 == (i[4]
-                    == (11
-                        + ((((i[3] + 4) * (0 == (i[3] == (i[2] + -8))))
-                            + ((1 + (25 * (0 == (i[3] == (i[2] + -8)))))
-                                * ((i[1] + 9) + (26 * (i[0] + 5)))))
-                            % 26))))))
-            * (((i[3] + 4) * (0 == (i[3] == (i[2] + -8))))
-                + ((1 + (25 * (0 == (i[3] == (i[2] + -8))))) * ((i[1] + 9) + (26 * (i[0] + 5))))));
     }
 
     0
