@@ -1665,10 +1665,11 @@ impl Graph for CaveGraph {
         }
         d
     }
-    fn neighbors(&self, c: &Caves) -> Vec<(Move, Caves)> {
+    fn neighbors(&self, c: &Caves) -> Vec<(Move, usize, Caves)> {
         let mut ret = vec![];
         for i in 0..8 {
             let fid = c.pods[i].0;
+            let fp = Caves::pos(fid);
             match c.y(i) {
                 0 if !c.entered_cave(i) => {
                     let cave_left_bit = i as u8 / 2 + 10;
@@ -1693,7 +1694,8 @@ impl Graph for CaveGraph {
                         let m = Move(i as u8, Pod(id | 0x10));
                         let mut n = c.clone();
                         n.mv(i, id);
-                        ret.push((m, n));
+                        let dc = Caves::d2(fp, (x, y)) as usize * (10 as usize).pow(i as u32 / 2);
+                        ret.push((m, dc, n));
                     }
                 }
                 y if y == 1 || !c.occupied(fid - 1) => {
@@ -1717,7 +1719,9 @@ impl Graph for CaveGraph {
                         let m = Move(i as u8, Pod(id));
                         let mut n = c.clone();
                         n.mv(i, id);
-                        ret.push((m, n));
+                        let dc = Caves::d2(fp, Caves::pos(id)) as usize
+                            * (10 as usize).pow(i as u32 / 2);
+                        ret.push((m, dc, n));
                     }
                 }
                 _ => {}
