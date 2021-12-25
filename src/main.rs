@@ -5,13 +5,16 @@ extern crate clap;
 extern crate vectrix;
 #[macro_use]
 extern crate ndarray;
+mod search;
 
 use clap::Parser;
 use ndarray::{Array2, Array3};
 use std::cmp::{max, min, Ordering};
+use std::fmt::Display;
 use std::hash::Hash;
 use std::time::Instant;
 //use std::hash::Hash;
+use search::{a_star_search, Graph};
 use std::{collections::VecDeque, fmt::Debug};
 
 use ndarray::Array;
@@ -1365,28 +1368,77 @@ fn day22(lines: &[&str], _groups: &[&[&str]], gold: bool) -> usize {
     n as usize
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-struct Pod {
-    kind: u8, // 0 = A, 1 = B, 2 = C, 3 = D
-    pos: (usize, usize),
-}
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+struct Pod(u8);
 
-impl Pod {
-    fn step_cost(&self) -> u32 {
-        10u32.pow(self.kind as u32)
-    }
-
-    fn goal_pos(&self) -> (usize, usize) {
-        (2 + self.kind as usize * 2, 2)
-    }
-}
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Caves {
-    pods: Vec<Pod>,
-    grid: Array2<Option<usize>>,
+    pods: [Pod; 8],
+    occupied: u16,
 }
 
 impl Caves {
+    /*
+    #############
+    #...........#
+    ###B#C#B#D###
+      #A#D#C#A#
+      #########
+
+    Position bits
+    #############
+    #9a b c d ef#
+    ###1#3#5#7###
+      #2#4#6#8#
+      #########
+    */
+    const LOCATIONS: [(u8, u8); 16] = [
+        (10, 2), //invalid
+        (2, 1),
+        (2, 2),
+        (4, 1),
+        (4, 2),
+        (6, 1),
+        (6, 2),
+        (8, 1),
+        (8, 2),
+        (0, 0),
+        (1, 0),
+        (3, 0),
+        (5, 0),
+        (7, 0),
+        (9, 0),
+        (10, 0),
+    ];
+
+    fn id(p: (u8, u8)) -> Option<u8> {
+        Self::LOCATIONS[..]
+            .iter()
+            .enumerate()
+            .find_map(|(i, l)| if *l == p { Some(i as u8) } else { None })
+    }
+
+    fn pos(id: u8) -> (u8, u8) {
+        Self::LOCATIONS[id as usize & 0xF]
+    }
+
+    fn entered_cave(&self, i: usize) -> bool {
+        (self.pods[i].0 & 0x10) != 0
+    }
+
+    fn y(&self, i: usize) -> u8 {
+        Self::pos(self.pods[i].0 & 0xF).1
+    }
+
+    fn occupied(&self, id: u8) -> bool {
+        0 != (self.occupied & (1 << id))
+    }
+    fn mv(&mut self, i: usize, id: u8) {
+        self.occupied &= !(1 << (self.pods[i].0 & 0xF));
+        self.pods[i].0 = id;
+        self.occupied |= 1 << (self.pods[i].0 & 0xF);
+    }
+
     fn new(lines: &[&str]) -> Self {
         let targets = lines
             .iter()
@@ -1403,42 +1455,48 @@ impl Caves {
             (6, 2),
             (8, 2),
         ];
-        let mut pods: Vec<_> = locations
-            .into_iter()
-            .zip(targets)
-            .map(|(p, t)| Pod {
-                pos: p,
-                kind: t as u8,
-            })
-            .collect();
-        pods.sort();
-        let mut grid = Array2::<Option<usize>>::from_elem((11, 3), None);
-        for (i, pod) in pods.iter().enumerate() {
-            grid[pod.pos] = Some(i);
+        let mut cave = Self {
+            pods: [Pod(0); 8],
+            occupied: 0,
+        };
+        locations.into_iter().zip(targets).for_each(|(p, t)| {
+            let id = Self::id(p);
+            let i = t * 2;
+            let i = if cave.pods[i] == Pod(0) { i } else { i + 1 };
+            cave.mv(i, id.unwrap());
+        });
+        cave
+    }
+    fn goal() -> Self {
+        let mut cave = Self {
+            pods: [Pod(0); 8],
+            occupied: 0,
+        };
+        for t in 0..4 {
+            for o in 0..2 {
+                cave.mv(
+                    t * 2 + o,
+                    Self::id(((2 + 2 * t) as u8, (o + 1) as u8)).unwrap(),
+                );
+            }
         }
-        Caves { pods, grid }
+        cave
     }
 
-    fn d1(a: usize, b: usize) -> usize {
+    fn d1(a: u8, b: u8) -> u8 {
         if a < b {
             b - a
         } else {
             a - b
         }
     }
-    fn d2((ax, ay): (usize, usize), (bx, by): (usize, usize)) -> usize {
+    fn d2((ax, ay): (u8, u8), (bx, by): (u8, u8)) -> u8 {
         Self::d1(ax, bx) + Self::d1(ay, by)
     }
-    fn mv(&mut self, i: usize, t: (usize, usize)) -> u32 {
-        let pod = &mut self.pods[i];
-        let cost = Self::d2(pod.pos, t) as u32 * pod.step_cost();
-        let p = &mut pod.pos;
-        self.grid[*p] = None;
-        *p = t;
-        self.grid[*p] = Some(i);
-        cost
+    fn did(a: u8, b: u8) -> u8 {
+        Self::d2(Self::pos(a), Self::pos(b))
     }
-
+    /*
     fn solve(&mut self) {
         fn step_path<F: FnMut((usize, usize))>(
             (mut x, mut y): (usize, usize),
@@ -1512,29 +1570,160 @@ impl Caves {
             panic!();
         }
     }
-    fn ch(&self, value: Option<usize>) -> char {
-        match value {
-            None => '.',
-            Some(i) => ('A' as u8 + self.pods[i].kind as u8) as char,
+    */
+
+    fn ch(&self, p: (u8, u8)) -> char {
+        if let Some(id) = Self::id(p) {
+            for (i, pod) in self.pods.iter().enumerate() {
+                if pod.0 == id {
+                    return ('A' as u8 + i as u8 / 2 + ('a' as u8 - 'A' as u8) * (i as u8 & 1))
+                        as char;
+                }
+            }
         }
+        ' '
     }
-    fn print(&self) {
-        eprintln!("#############");
+}
+#[derive(Clone, Debug)]
+struct Move(u8, Pod); // Move #.0 to .1
+impl std::fmt::Display for Move {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Result::Ok(())
+    }
+}
+
+impl std::fmt::Display for Caves {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "#############\n")?;
         for y in 0..3 {
-            eprint!("#");
+            write!(f, "#")?;
             for x in 0..11 {
-                eprint!(
+                write!(
+                    f,
                     "{}",
                     if y > 0 && ![2, 4, 6, 8].contains(&x) {
                         '#'
                     } else {
-                        self.ch(self.grid[(x, 0)])
+                        self.ch((x, y))
                     }
                 );
             }
-            eprintln!("#");
+            write!(f, "#\n")?;
         }
-        eprintln!("#############");
+        write!(f, "#############\n")?;
+        Ok(())
+    }
+}
+
+struct CaveGraph {
+    start: Caves,
+}
+impl CaveGraph {
+    fn new(start: Caves) -> Self {
+        Self { start }
+    }
+    fn solve(&self) {
+        eprintln!("Starting...");
+        if let Some((cost, path)) = a_star_search(self) {
+            for (c, e, n) in path {
+                eprintln!("{}then spend {}", n, c);
+            }
+            eprintln!("Done with cost {}!", cost);
+        } else {
+            panic!("No solution!");
+        }
+        //let r = search::dfs_search(self);
+    }
+}
+impl Graph for CaveGraph {
+    type Node = Caves;
+    type Edge = Move;
+
+    fn start(&self) -> Caves {
+        self.start.clone()
+    }
+    fn goal(&self) -> Caves {
+        Caves::goal()
+    }
+    fn null_edge() -> Move {
+        Move(0, Pod(0))
+    }
+    fn distance(&self, a: &Caves, b: &Caves) -> usize {
+        let mut d = 0;
+        let mut c = 1;
+        for i in 0..4 {
+            let a0 = a.pods[i * 2].0;
+            let a1 = a.pods[i * 2 + 1].0;
+            let b0 = b.pods[i * 2].0;
+            let b1 = b.pods[i * 2 + 1].0;
+            let ds = min(
+                Caves::did(a0, b0) + Caves::did(a1, b1),
+                Caves::did(a1, b0) + Caves::did(a0, b1),
+            );
+            d += c * ds as usize;
+            c *= 10;
+        }
+        d
+    }
+    fn neighbors(&self, c: &Caves) -> Vec<(Move, Caves)> {
+        let mut ret = vec![];
+        for i in 0..8 {
+            let fid = c.pods[i].0;
+            match c.y(i) {
+                0 if !c.entered_cave(i) => {
+                    let cave_left_bit = i as u8 / 2 + 10;
+                    let x = (i as u8 / 2) * 2 + 2;
+                    assert_eq!(Caves::pos(fid).1, 0);
+                    assert_eq!(Caves::id((x - 1, 0)), Some(cave_left_bit));
+                    // Range to check for exclusions, skipping self.
+                    let mut range = if fid > cave_left_bit {
+                        cave_left_bit..fid
+                    } else {
+                        (fid + 1)..(cave_left_bit + 1)
+                    };
+                    if range.any(|step| (c.occupied(step))) {
+                        continue;
+                    }
+                    //eprintln!("All clear");
+                    for y in 1..=2 {
+                        let id = Caves::id((x, y)).unwrap();
+                        if c.occupied(id) {
+                            break;
+                        }
+                        let m = Move(i as u8, Pod(id | 0x10));
+                        let mut n = c.clone();
+                        n.mv(i, id);
+                        ret.push((m, n));
+                    }
+                }
+                y if y == 1 || !c.occupied(fid - 1) => {
+                    for id in 9..16 {
+                        let cave_left_bit = (fid - 1) / 2 + 10;
+                        assert_eq!(
+                            Caves::pos(cave_left_bit).0 + 1,
+                            Caves::pos(fid).0,
+                            "{}, {}",
+                            fid,
+                            i
+                        );
+                        let mut range = if id > cave_left_bit {
+                            (cave_left_bit + 1)..=id
+                        } else {
+                            id..=cave_left_bit
+                        };
+                        if range.any(|step| (c.occupied(step))) {
+                            continue;
+                        }
+                        let m = Move(i as u8, Pod(id));
+                        let mut n = c.clone();
+                        n.mv(i, id);
+                        ret.push((m, n));
+                    }
+                }
+                _ => {}
+            }
+        }
+        ret
     }
 }
 
@@ -1542,10 +1731,10 @@ fn day23(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     if gold {
         return 0;
     }
-    let mut caves = Caves::new(lines);
-    caves.solve();
+    let graph = CaveGraph::new(Caves::new(lines));
+    eprintln!("{}to\n{}", &graph.start, &Caves::goal());
+    graph.solve();
 
-    dbg!(&caves);
     1
 }
 
