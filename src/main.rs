@@ -1437,6 +1437,11 @@ impl Caves {
         self.occupied &= !(1 << (self.pods[i].0 & 0xF));
         self.pods[i].0 = id;
         self.occupied |= 1 << (self.pods[i].0 & 0xF);
+        let a = i & !1;
+        let b = i | 1;
+        if self.pods[a].0 > self.pods[b].0 {
+            self.pods.swap(a, b);
+        }
     }
 
     fn new(lines: &[&str]) -> Self {
@@ -1473,7 +1478,7 @@ impl Caves {
             occupied: 0,
         };
         for t in 0..4 {
-            for o in 0..2 {
+            for o in (0..2).rev() {
                 cave.mv(
                     t * 2 + o,
                     Self::id(((2 + 2 * t) as u8, (o + 1) as u8)).unwrap(),
@@ -1483,18 +1488,20 @@ impl Caves {
         cave
     }
 
-    fn d1(a: u8, b: u8) -> u8 {
-        if a < b {
-            b - a
-        } else {
-            a - b
+    fn dist((ax, ay): (u8, u8), (bx, by): (u8, u8)) -> u8 {
+        fn d1(a: u8, b: u8) -> u8 {
+            if a < b {
+                b - a
+            } else {
+                a - b
+            }
         }
-    }
-    fn d2((ax, ay): (u8, u8), (bx, by): (u8, u8)) -> u8 {
-        Self::d1(ax, bx) + Self::d1(ay, by)
-    }
-    fn did(a: u8, b: u8) -> u8 {
-        Self::d2(Self::pos(a), Self::pos(b))
+        let dx = d1(ax, bx);
+        if dx == 0 {
+            d1(ay, by)
+        } else {
+            dx + ay + by
+        }
     }
     /*
     fn solve(&mut self) {
@@ -1625,8 +1632,8 @@ impl CaveGraph {
     fn solve(&self) {
         eprintln!("Starting...");
         if let Some((cost, path)) = a_star_search(self) {
-            for (c, e, n) in path {
-                eprintln!("{}then spend {}", n, c);
+            for (c, n) in path {
+                eprintln!("{}\nthen spend {}", n, c);
             }
             eprintln!("Done with cost {}!", cost);
         } else {
@@ -1652,20 +1659,20 @@ impl Graph for CaveGraph {
         let mut d = 0;
         let mut c = 1;
         for i in 0..4 {
-            let a0 = a.pods[i * 2].0;
-            let a1 = a.pods[i * 2 + 1].0;
-            let b0 = b.pods[i * 2].0;
-            let b1 = b.pods[i * 2 + 1].0;
+            let a0 = Caves::pos(a.pods[i * 2].0);
+            let a1 = Caves::pos(a.pods[i * 2 + 1].0);
+            let b0 = Caves::pos(b.pods[i * 2].0);
+            let b1 = Caves::pos(b.pods[i * 2 + 1].0);
             let ds = min(
-                Caves::did(a0, b0) + Caves::did(a1, b1),
-                Caves::did(a1, b0) + Caves::did(a0, b1),
+                Caves::dist(a0, b0) + Caves::dist(a1, b1),
+                Caves::dist(a1, b0) + Caves::dist(a0, b1),
             );
             d += c * ds as usize;
             c *= 10;
         }
         d
     }
-    fn neighbors(&self, c: &Caves) -> Vec<(Move, usize, Caves)> {
+    fn neighbors(&self, c: &Caves) -> Vec<(Move, Caves)> {
         let mut ret = vec![];
         for i in 0..8 {
             let fid = c.pods[i].0;
@@ -1694,8 +1701,8 @@ impl Graph for CaveGraph {
                         let m = Move(i as u8, Pod(id | 0x10));
                         let mut n = c.clone();
                         n.mv(i, id);
-                        let dc = Caves::d2(fp, (x, y)) as usize * (10 as usize).pow(i as u32 / 2);
-                        ret.push((m, dc, n));
+                        let dc = Caves::dist(fp, (x, y)) as usize * (10 as usize).pow(i as u32 / 2);
+                        ret.push((m, n));
                     }
                 }
                 y if y == 1 || !c.occupied(fid - 1) => {
@@ -1719,9 +1726,9 @@ impl Graph for CaveGraph {
                         let m = Move(i as u8, Pod(id));
                         let mut n = c.clone();
                         n.mv(i, id);
-                        let dc = Caves::d2(fp, Caves::pos(id)) as usize
+                        let dc = Caves::dist(fp, Caves::pos(id)) as usize
                             * (10 as usize).pow(i as u32 / 2);
-                        ret.push((m, dc, n));
+                        ret.push((m, n));
                     }
                 }
                 _ => {}
@@ -1736,6 +1743,12 @@ fn day23(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
         return 0;
     }
     let graph = CaveGraph::new(Caves::new(lines));
+    eprintln!(
+        "Trying to transform this:\n{}\nInto:\n{}",
+        &graph.start,
+        &graph.goal()
+    );
+
     eprintln!("{}to\n{}", &graph.start, &Caves::goal());
     graph.solve();
 
