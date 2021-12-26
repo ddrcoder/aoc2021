@@ -1373,8 +1373,8 @@ struct Pod(u8);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Caves {
-    pods: [Pod; 8],
-    occupied: u16,
+    pods: [Pod; 16],
+    occupied: u32,
 }
 
 impl Caves {
@@ -1387,47 +1387,40 @@ impl Caves {
 
     Position bits
     #############
-    #9a b c d ef#
-    ###1#3#5#7###
-      #2#4#6#8#
+    #0123456789a# <-- 0x1V
+    ###0#4#8#c### <-- 0x0* in caves
+      #1#5#9#d#
+      #2#6#a#e#
+      #3#7#b#f#
       #########
     */
-    const LOCATIONS: [(u8, u8); 16] = [
-        (10, 2), //invalid
-        (2, 1),
-        (2, 2),
-        (4, 1),
-        (4, 2),
-        (6, 1),
-        (6, 2),
-        (8, 1),
-        (8, 2),
-        (0, 0),
-        (1, 0),
-        (3, 0),
-        (5, 0),
-        (7, 0),
-        (9, 0),
-        (10, 0),
-    ];
-
-    fn id(p: (u8, u8)) -> Option<u8> {
-        Self::LOCATIONS[..]
-            .iter()
-            .enumerate()
-            .find_map(|(i, l)| if *l == p { Some(i as u8) } else { None })
+    fn id((x, y): (u8, u8)) -> u8 {
+        if y > 0 {
+            // assert!(x >= 2 && x <= 4 && x % 2 == 0);
+            let r = (x / 2 - 1) * 4 + y - 1;
+            assert!(r < 16);
+            r
+        } else {
+            assert!(x <= 10);
+            x + 0x10
+        }
     }
 
     fn pos(id: u8) -> (u8, u8) {
-        Self::LOCATIONS[id as usize & 0xF]
+        let id = id & 0x1F;
+        if id < 0x10 {
+            ((id / 4) * 2 + 2, id % 4 + 1)
+        } else {
+            (id - 0x10, 0)
+        }
     }
 
     fn entered_cave(&self, i: usize) -> bool {
-        (self.pods[i].0 & 0x10) != 0
+        (self.pods[i].0 & 0x80) != 0
     }
 
     fn y(&self, i: usize) -> u8 {
-        Self::pos(self.pods[i].0 & 0xF).1
+        Self::pos(self.pods[i].0 & 0x1F).1
     }
 
     fn occupied(&self, id: u8) -> bool {
@@ -1437,14 +1430,11 @@ impl Caves {
         self.occupied &= !(1 << (self.pods[i].0 & 0xF));
         self.pods[i].0 = id;
         self.occupied |= 1 << (self.pods[i].0 & 0xF);
-        let a = i & !1;
-        let b = i | 1;
-        if self.pods[a].0 > self.pods[b].0 {
-            self.pods.swap(a, b);
-        }
+        let b = (i & !3);
+        self.pods[b..(b + 4)].sort()
     }
 
-    fn new(lines: &[&str]) -> Self {
+    fn parse(lines: &[&str], gold: bool) -> Self {
         let targets = lines
             .iter()
             .flat_map(|line| line.chars())
@@ -1460,29 +1450,40 @@ impl Caves {
             (6, 2),
             (8, 2),
         ];
-        let mut cave = Self {
-            pods: [Pod(0); 8],
-            occupied: 0,
-        };
-        locations.into_iter().zip(targets).for_each(|(p, t)| {
-            let id = Self::id(p);
-            let i = t * 2;
-            let i = if cave.pods[i] == Pod(0) { i } else { i + 1 };
-            cave.mv(i, id.unwrap());
+        let mut cave = Self::new();
+        let mut counts = [0; 4];
+        locations.into_iter().zip(targets).for_each(|((x, y), t)| {
+            let id = Self::id((x, y));
+            let end = &mut counts[t];
+            let i = t * 4 + *end;
+            *end += 1;
+            cave.pods[i].0 = id;
         });
+        if !gold {
+            for t in 0..4 {
+                for o in 2..4 {
+                    let i = t * 4 + o;
+                    cave.pods[i].0 = Self::id(((2 + 2 * t) as u8, (o + 1) as u8));
+                }
+            }
+        }
+        for i in 0..4 {
+            let b = i * 4;
+            cave.pods[b..(b + 4)].sort();
+        }
         cave
     }
-    fn goal() -> Self {
-        let mut cave = Self {
-            pods: [Pod(0); 8],
+    fn new() -> Self {
+        Self {
+            pods: [Pod(0x20); 16],
             occupied: 0,
-        };
+        }
+    }
+    fn goal() -> Self {
+        let mut cave = Self::new();
         for t in 0..4 {
-            for o in (0..2).rev() {
-                cave.mv(
-                    t * 2 + o,
-                    Self::id(((2 + 2 * t) as u8, (o + 1) as u8)).unwrap(),
-                );
+            for o in 0..4 {
+                cave.mv(t * 4 + o, Self::id(((2 + 2 * t) as u8, (o + 1) as u8)));
             }
         }
         cave
@@ -1579,12 +1580,12 @@ impl Caves {
     }
     */
 
-    fn ch(&self, p: (u8, u8)) -> char {
-        if let Some(id) = Self::id(p) {
+    fn ch(&self, (x, y): (u8, u8)) -> char {
+        if y == 0 || (x % 2 == 0 && x >= 2 && x <= 8) {
+            let id = Self::id((x, y));
             for (i, pod) in self.pods.iter().enumerate() {
                 if pod.0 == id {
-                    return ('A' as u8 + i as u8 / 2 + ('a' as u8 - 'A' as u8) * (i as u8 & 1))
-                        as char;
+                    return ('A' as u8 + i as u8 / 4) as char;
                 }
             }
         }
@@ -1602,9 +1603,9 @@ impl std::fmt::Display for Move {
 impl std::fmt::Display for Caves {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "#############\n")?;
-        for y in 0..3 {
+        for y in 0..5 {
             write!(f, "#")?;
-            for x in 0..11 {
+            for x in 0..=10 {
                 write!(
                     f,
                     "{}",
@@ -1653,72 +1654,104 @@ impl Graph for CaveGraph {
         Caves::goal()
     }
     fn null_edge() -> Move {
-        Move(0, Pod(0))
+        Move(0, Pod(0x20))
     }
     fn distance(&self, a: &Caves, b: &Caves) -> usize {
         let mut d = 0;
         let mut c = 1;
         for i in 0..4 {
-            let a0 = Caves::pos(a.pods[i * 2].0);
-            let a1 = Caves::pos(a.pods[i * 2 + 1].0);
-            let b0 = Caves::pos(b.pods[i * 2].0);
-            let b1 = Caves::pos(b.pods[i * 2 + 1].0);
-            let ds = min(
-                Caves::dist(a0, b0) + Caves::dist(a1, b1),
-                Caves::dist(a1, b0) + Caves::dist(a0, b1),
-            );
-            d += c * ds as usize;
+            let a = &a.pods[(i * 4)..((i + 1) * 4)];
+            let b = &b.pods[(i * 4)..((i + 1) * 4)];
+            let a = [
+                Caves::pos(a[0].0),
+                Caves::pos(a[1].0),
+                Caves::pos(a[2].0),
+                Caves::pos(a[3].0),
+            ];
+            let b = [
+                Caves::pos(b[0].0),
+                Caves::pos(b[1].0),
+                Caves::pos(b[2].0),
+                Caves::pos(b[3].0),
+            ];
+
+            let mut min_dist = 0xff;
+            for b0 in 0..4 {
+                for b1 in 0..4 {
+                    if b1 == b0 {
+                        continue;
+                    }
+                    for b2 in 0..4 {
+                        if b2 == b1 || b2 == b0 {
+                            continue;
+                        }
+                        for b3 in 0..4 {
+                            if b3 == b2 || b3 == b1 || b3 == b0 {
+                                continue;
+                            }
+                            let dist = Caves::dist(a[0], b[b0])
+                                + Caves::dist(a[1], b[b2])
+                                + Caves::dist(a[2], b[b2])
+                                + Caves::dist(a[3], b[b3])
+                                + 0;
+                            if dist < min_dist {
+                                min_dist = dist;
+                            }
+                        }
+                    }
+                }
+            }
+            d += c * min_dist as usize;
             c *= 10;
         }
         d
     }
     fn neighbors(&self, c: &Caves) -> Vec<(Move, Caves)> {
         let mut ret = vec![];
-        for i in 0..8 {
+        for i in 0..16 {
             let fid = c.pods[i].0;
             let fp = Caves::pos(fid);
+            if fp.1 > 2 {
+                continue;
+            }
+            let cave_exit_bit = Caves::id((fp.0, 0));
+            let t = i / 4;
+            let dc = (10 as usize).pow(t as u32);
             match c.y(i) {
                 0 if !c.entered_cave(i) => {
-                    let cave_left_bit = i as u8 / 2 + 10;
-                    let x = (i as u8 / 2) * 2 + 2;
-                    assert_eq!(Caves::pos(fid).1, 0);
-                    assert_eq!(Caves::id((x - 1, 0)), Some(cave_left_bit));
+                    let tx = t as u8 * 2 + 2;
                     // Range to check for exclusions, skipping self.
-                    let mut range = if fid > cave_left_bit {
-                        cave_left_bit..fid
+                    let mut range = if fid > cave_exit_bit {
+                        (cave_exit_bit + 1)..fid
                     } else {
-                        (fid + 1)..(cave_left_bit + 1)
+                        (fid + 1)..cave_exit_bit
                     };
                     if range.any(|step| (c.occupied(step))) {
                         continue;
                     }
                     //eprintln!("All clear");
-                    for y in 1..=2 {
-                        let id = Caves::id((x, y)).unwrap();
+                    for ty in 1..=4 {
+                        let id = Caves::id((tx, ty));
                         if c.occupied(id) {
                             break;
                         }
-                        let m = Move(i as u8, Pod(id | 0x10));
+                        let m = Move(i as u8, Pod(id | 0x80));
                         let mut n = c.clone();
                         n.mv(i, id);
-                        let dc = Caves::dist(fp, (x, y)) as usize * (10 as usize).pow(i as u32 / 2);
+                        //let dist = Caves::dist(fp, (x, y)) as usize;
                         ret.push((m, n));
                     }
                 }
                 y if y == 1 || !c.occupied(fid - 1) => {
-                    for id in 9..16 {
-                        let cave_left_bit = (fid - 1) / 2 + 10;
-                        assert_eq!(
-                            Caves::pos(cave_left_bit).0 + 1,
-                            Caves::pos(fid).0,
-                            "{}, {}",
-                            fid,
-                            i
-                        );
-                        let mut range = if id > cave_left_bit {
-                            (cave_left_bit + 1)..=id
+                    for x in 0..=10 {
+                        if x == 2 || x == 4 || x == 6 || x == 8 {
+                            continue;
+                        }
+                        let id = Caves::id((x, 0));
+                        let mut range = if id > cave_exit_bit {
+                            (cave_exit_bit + 1)..=id
                         } else {
-                            id..=cave_left_bit
+                            id..=(cave_exit_bit - 1)
                         };
                         if range.any(|step| (c.occupied(step))) {
                             continue;
@@ -1726,8 +1759,7 @@ impl Graph for CaveGraph {
                         let m = Move(i as u8, Pod(id));
                         let mut n = c.clone();
                         n.mv(i, id);
-                        let dc = Caves::dist(fp, Caves::pos(id)) as usize
-                            * (10 as usize).pow(i as u32 / 2);
+                        //let dc = Caves::dist(fp, Caves::pos(id)) as usize * (10 as usize).pow(i as u32 / 4);
                         ret.push((m, n));
                     }
                 }
@@ -1742,10 +1774,11 @@ fn day23(lines: &[&str], groups: &[&[&str]], gold: bool) -> usize {
     if gold {
         return 0;
     }
-    let graph = CaveGraph::new(Caves::new(lines));
+    let graph = CaveGraph::new(Caves::parse(lines, gold));
     eprintln!(
-        "Trying to transform this:\n{}\nInto:\n{}",
+        "Trying to transform this:\n{}\nInto:\n{}\n{:?}",
         &graph.start,
+        &graph.goal(),
         &graph.goal()
     );
 
